@@ -1,0 +1,13 @@
+version: v1alpha1
+persist: true
+{{ template "talos-machine" . }}
+cluster:
+  clusterName: {{ index .Vars "cluster" }}
+  controlPlane:
+    endpoint: {{ index .Vars "cluster_endpoint" }}
+  apiServer: {}
+  controllerManager: {}
+  scheduler: {}
+  etcd: {}
+# NOTE: secrets omitted — same as the worker profile; the machinery secrets bundle
+# supplies machine.token, PKI, cluster.id/secret in production (deferred).

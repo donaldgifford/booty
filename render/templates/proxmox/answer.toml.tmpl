@@ -1,0 +1,18 @@
+[global]
+keyboard = "{{ coalesce (index .Vars "keyboard") "en-us" }}"
+country = "{{ coalesce (index .Vars "country") "us" }}"
+fqdn = "{{ coalesce (index .Vars "fqdn") (index .Vars "hostname") .Identity.MAC }}"
+mailto = "{{ coalesce (index .Vars "mailto") "root@localhost" }}"
+timezone = "{{ coalesce (index .Vars "timezone") "UTC" }}"
+# Hashed, never plaintext: generate with `mkpasswd -m sha-512` and set the
+# root_password_hashed var on the profile or group. An empty value here fails
+# the install loudly rather than installing with a blank root password.
+root_password_hashed = "{{ index .Vars "root_password_hashed" }}"
+reboot_on_error = false
+
+[network]
+source = "from-dhcp"
+
+[disk-setup]
+filesystem = "{{ coalesce (index .Vars "filesystem") "ext4" }}"
+disk_list = ["{{ coalesce (index .Vars "install_disk") "sda" }}"]

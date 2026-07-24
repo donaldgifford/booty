@@ -1,0 +1,12 @@
+#!ipxe
+# The chainloading script — iPXE runs THIS first (embedded in ipxe.efi, or fetched
+# via DHCP option 175). Its whole job is to collect the machine's identity from
+# iPXE's built-in settings and hand it to booty's /ipxe endpoint. iPXE does not
+# send any of this automatically; this script is what makes /ipxe?mac=... work.
+#
+# ${...} are iPXE settings, expanded by iPXE at run time on the booting machine.
+chain {{ .BaseURL }}/ipxe?mac=${mac}&ip=${ip}&uuid=${uuid}&serial=${serial}&arch=${buildarch}&product=${product}&manufacturer=${manufacturer} || goto failed
+
+:failed
+echo booty: could not chainload boot script from {{ .BaseURL }}
+shell

@@ -1,0 +1,11 @@
+version: v1alpha1
+persist: true
+{{ template "talos-machine" . }}
+cluster:
+  clusterName: {{ index .Vars "cluster" }}
+  controlPlane:
+    endpoint: {{ index .Vars "cluster_endpoint" }}
+# NOTE: secrets (machine.token, machine.ca, cluster.id/secret, PKI) are intentionally
+# omitted. In production the Talos `machinery` secrets bundle supplies them behind an
+# owned interface; hand-templating them would be insecure and schema-incorrect.
+# machinery is the deferred upgrade — see docs/adr and PLAN-0001.

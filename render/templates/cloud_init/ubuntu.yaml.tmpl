@@ -1,0 +1,11 @@
+#cloud-config
+hostname: {{ or (index .Vars "hostname") .Identity.MAC }}
+manage_etc_hosts: true
+users:
+  - name: {{ or (index .Vars "user") "ops" }}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    groups: [sudo]
+runcmd:
+  - echo "provisioned by booty (profile {{ .Profile.Name }})" > /etc/booty-provisioned
+final_message: "booty provisioning complete for {{ or (index .Vars "hostname") .Identity.MAC }}"

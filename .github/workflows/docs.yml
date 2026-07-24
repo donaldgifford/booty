@@ -1,0 +1,83 @@
+---
+# yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - site/**
+      - .markdownlint.yaml
+      - .github/workflows/docs.yml
+      - justfile
+      - mise.toml
+  pull_request:
+    branches: [main]
+    paths:
+      - docs/**
+      - site/**
+      - .markdownlint.yaml
+      - .github/workflows/docs.yml
+      - justfile
+      - mise.toml
+
+permissions:
+  contents: read
+
+jobs:
+  lint-md:
+    name: Lint Markdown
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up mise
+        uses: jdx/mise-action@v4
+        with:
+          experimental: true
+
+      - name: Run markdown lint
+        run: just lint-md
+
+  build:
+    name: Build Starlight
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up mise (Node)
+        uses: jdx/mise-action@v4
+        with:
+          experimental: true
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            site/node_modules
+          key: npm-${{ runner.os }}-${{ hashFiles('site/package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Type + content check
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload built site
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-dist
+          path: site/dist
+          retention-days: 7
+          if-no-files-found: warn

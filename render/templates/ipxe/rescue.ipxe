@@ -1,0 +1,10 @@
+#!ipxe
+# Served for the rescue/catch-all profile: a machine matched no specific group.
+# Rather than hang, we tell the operator what we know and drop to a shell.
+echo booty: no specific profile for this machine
+echo   mac:          {{ coalesce .Identity.MAC "(unknown)" }}
+echo   product:      {{ coalesce .Identity.Product "(unknown)" }}
+echo   manufacturer: {{ coalesce .Identity.Manufacturer "(unknown)" }}
+echo   serial:       {{ coalesce .Identity.Serial "(unknown)" }}
+echo Add a group for this machine in the catalog, then reboot.
+shell

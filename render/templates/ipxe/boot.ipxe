@@ -1,0 +1,16 @@
+#!ipxe
+# Per-machine boot script, rendered by booty for the matched profile.
+# {{ coalesce (index .Vars "hostname") .Identity.MAC }} — profile {{ .Profile.Name }}
+echo booty: booting {{ coalesce (index .Vars "hostname") .Identity.MAC }} (profile {{ .Profile.Name }})
+
+# {{ "${...}" }} sequences below are iPXE variables, substituted by iPXE at boot;
+# {{ "{{" }}.Field{{ "}}" }} sequences are rendered by booty now. Different delimiters,
+# no collision.
+kernel {{ .BaseURL }}/boot/{{ .Profile.Boot.Kernel }} initrd={{ base .Profile.Boot.Initrd }}{{ range .Profile.Boot.Cmdline }} {{ . }}{{ end }}
+initrd {{ .BaseURL }}/boot/{{ .Profile.Boot.Initrd }}
+boot || goto failed
+
+:failed
+echo booty: boot failed for profile {{ .Profile.Name }}
+echo Dropping to an iPXE shell.
+shell

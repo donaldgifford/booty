@@ -1,0 +1,16 @@
+#!ipxe
+# Per-machine boot script, rendered by booty for the matched profile.
+# talos-worker-01 — profile talos-worker
+echo booty: booting talos-worker-01 (profile talos-worker)
+
+# ${...} sequences below are iPXE variables, substituted by iPXE at boot;
+# {{.Field}} sequences are rendered by booty now. Different delimiters,
+# no collision.
+kernel http://192.168.1.10:8080/boot/talos/v1.7.6/vmlinuz initrd=initramfs.xz console=ttyS0,115200n8 console=tty0 talos.platform=metal talos.config=http://boot.home.local:8080/machine-config?mac=${mac}
+initrd http://192.168.1.10:8080/boot/talos/v1.7.6/initramfs.xz
+boot || goto failed
+
+:failed
+echo booty: boot failed for profile talos-worker
+echo Dropping to an iPXE shell.
+shell

@@ -1,0 +1,20 @@
+version: v1alpha1
+persist: true
+machine:
+  type: worker
+  install:
+    disk: /dev/sda
+    image: ghcr.io/siderolabs/installer:v1.7.6
+    wipe: false
+  network:
+    hostname: talos-worker-01
+  kubelet:
+    defaultRuntimeSeccompProfileEnabled: true
+cluster:
+  clusterName: home
+  controlPlane:
+    endpoint: https://192.168.1.100:6443
+# NOTE: secrets (machine.token, machine.ca, cluster.id/secret, PKI) are intentionally
+# omitted. In production the Talos `machinery` secrets bundle supplies them behind an
+# owned interface; hand-templating them would be insecure and schema-incorrect.
+# machinery is the deferred upgrade — see docs/adr and PLAN-0001.

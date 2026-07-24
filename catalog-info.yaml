@@ -1,0 +1,19 @@
+---
+# yaml-language-server: $schema=https://www.schemastore.org/catalog-info.json
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: booty
+  title: booty
+  description: A go library for cloud-init, iPXE, netboot, and other unattended network installations.
+  annotations:
+    backstage.io/source-location: url:https://github.com/donaldgifford/booty
+    backstage.io/techdocs-ref: "dir:."
+  tags:
+    - go
+  namespace: default
+spec:
+  lifecycle: production
+  type: library
+  owner: donaldgifford
+  system: dev-tools

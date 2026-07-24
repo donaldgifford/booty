@@ -1,0 +1,2 @@
+instance-id: booty-{{ or (index .Vars "hostname") .Identity.MAC }}
+local-hostname: {{ or (index .Vars "hostname") .Identity.MAC }}

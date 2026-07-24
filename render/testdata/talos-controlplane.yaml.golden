@@ -1,0 +1,22 @@
+version: v1alpha1
+persist: true
+machine:
+  type: controlplane
+  install:
+    disk: /dev/sda
+    image: ghcr.io/siderolabs/installer:v1.7.6
+    wipe: false
+  network:
+    hostname: talos-cp-01
+  kubelet:
+    defaultRuntimeSeccompProfileEnabled: true
+cluster:
+  clusterName: home
+  controlPlane:
+    endpoint: https://192.168.1.100:6443
+  apiServer: {}
+  controllerManager: {}
+  scheduler: {}
+  etcd: {}
+# NOTE: secrets omitted — same as the worker profile; the machinery secrets bundle
+# supplies machine.token, PKI, cluster.id/secret in production (deferred).

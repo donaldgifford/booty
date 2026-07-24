@@ -1,0 +1,12 @@
+{{- define "talos-machine" -}}
+machine:
+  type: {{ index .Vars "role" }}
+  install:
+    disk: {{ or (index .Vars "install_disk") "/dev/sda" }}
+    image: ghcr.io/siderolabs/installer:{{ index .Vars "talos_version" }}
+    wipe: false
+  network:
+    hostname: {{ or (index .Vars "hostname") .Identity.MAC }}
+  kubelet:
+    defaultRuntimeSeccompProfileEnabled: true
+{{- end -}}

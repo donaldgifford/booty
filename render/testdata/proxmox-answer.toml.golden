@@ -1,0 +1,18 @@
+[global]
+keyboard = "en-us"
+country = "us"
+fqdn = "pve-01.home.local"
+mailto = "root@home.local"
+timezone = "America/New_York"
+# Hashed, never plaintext: generate with `mkpasswd -m sha-512` and set the
+# root_password_hashed var on the profile or group. An empty value here fails
+# the install loudly rather than installing with a blank root password.
+root_password_hashed = "$6$rounds=656000$SALT$HASH"
+reboot_on_error = false
+
+[network]
+source = "from-dhcp"
+
+[disk-setup]
+filesystem = "ext4"
+disk_list = ["nvme0n1"]
