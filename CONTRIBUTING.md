@@ -120,6 +120,10 @@ Push your branch and open a PR against `main`. The PR description should:
 - Link to the related issue (if any) with `Fixes #123` or `Refs #123`
 - Include a test plan or describe how you verified the change
 
+Releases are label-driven: a maintainer applies a `major`/`minor`/`patch` label
+before merge to cut a release on merge (or `dont-release` to skip), so there's
+nothing release-related for you to do in the PR itself.
+
 ## License
 
 By contributing you agree that your contributions will be licensed under the

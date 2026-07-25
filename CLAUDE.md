@@ -60,9 +60,13 @@ justfile                # `just` task runner — `just` for the menu
 
 ### Release
 
-- `just release v0.1.0` — tag + push. CI picks up the `v*` tag and runs
-  `goreleaser release --clean`, producing multi-arch archives and a
-  GitHub release (via `GITHUB_TOKEN`).
+- Releases are **label-driven**: merge a PR to `main` with a `major`/
+  `minor`/`patch` label and `.github/workflows/release.yml` bumps the
+  version (pr-semver-bump), tags, runs `goreleaser release --clean`
+  (archives + SBOMs, GPG-signed checksums), then bakes + pushes the
+  multi-arch image to GHCR. A `dont-release` label skips it.
+- `just release v0.1.0` creates and pushes a tag manually, but no
+  workflow fires on tag push — the label flow above is the release path.
 - Version metadata is injected into the binary via `-ldflags`:
   `main.version`, `main.commit`, `main.date`. `booty version` prints it.
 
@@ -105,10 +109,11 @@ the cache layers.
 ## CI matrix
 
 - `.github/workflows/ci.yml` runs on every push/PR — golangci-lint,
-  `just test-coverage` + `just coverage-gate` (Codecov upload), security
-  scan.
-- `.github/workflows/release.yml` fires only on `v*` tag push;
-  `goreleaser` consumes `.goreleaser.yml` with `GITHUB_TOKEN`.
+  `just test-coverage` + `just coverage-gate` + the e2e protocol tier
+  (Codecov upload), govulncheck + Trivy, a goreleaser snapshot with
+  SBOM scan, and a bake of the CI image (pushed as `:dev-ci` on PRs).
+- `.github/workflows/release.yml` runs on merge to `main` — label-driven
+  version bump + tag, goreleaser release, multi-arch GHCR image push.
 - Changelog workflows regenerate `CHANGELOG.md` via git-cliff from
   conventional commits.
 

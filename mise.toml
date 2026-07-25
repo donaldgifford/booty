@@ -46,6 +46,8 @@ jq = "latest"
 # Release tools
 # renovate: datasource=github-releases depName=golangci/golangci-lint
 golangci-lint = "2.11.4"
+# renovate: datasource=github-releases depName=goreleaser/goreleaser
+goreleaser = "2.14.3"
 
 # Security
 # renovate: datasource=github-releases depName=anchore/syft

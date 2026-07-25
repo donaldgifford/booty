@@ -99,11 +99,10 @@ repo conventions. Design decisions are recorded as ADRs in [docs/adr](docs/adr/)
 
 ## Release
 
-```sh
-just release v0.1.0           # tags + pushes; CI runs goreleaser on the tag
-```
-
-Multi-arch (linux+darwin × amd64+arm64) archives land on the release page.
+Releases are label-driven: merging a PR with a `major`/`minor`/`patch` label
+bumps the version, tags, runs goreleaser, and pushes the multi-arch container
+image to GHCR (label `dont-release` to skip). Multi-arch (linux+darwin ×
+amd64+arm64) archives with SBOMs and signed checksums land on the release page.
 Version metadata (`version`, `commit`, `date`) is embedded via `-ldflags`;
 `booty version` prints it.
 

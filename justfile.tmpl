@@ -1,22 +1,27 @@
-# booty — task runner
+# ${project_name} — task runner
 #
-# Project automation via just. Docker recipes live in docker.just and
-# drive `docker buildx bake` against docker-bake.hcl.
+# Project automation via just. Use either the Makefile or this justfile —
+# both expose the same target set with equivalent behavior.
+#
+# Container projects: add `import 'docker.just'` below `set shell` — its
+# recipes drive `docker buildx bake` against docker-bake.hcl and feed the
+# version/commit_hash/build_date variables defined here into the build args.
 
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
-import 'docker.just'
-
-project_name      := "booty"
-project_owner     := "donaldgifford"
-go_package        := "github.com/" + project_owner + "/" + project_name
+project_name      := "${project_name}"
+project_owner     := "${project_owner}"
+go_package        := "${git_host}/" + project_owner + "/" + project_name
 build_dir         := "build"
 bin_dir           := build_dir + "/bin"
 coverage_out      := "coverage.out"
 allowed_licenses  := "Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,ISC,MPL-2.0"
-goimports_local   := "github.com/" + project_owner
+goimports_local   := "${git_host}/" + project_owner
 coverage_min      := "60"
-library_packages  := "./catalog/... ./render/... ./httpsrv/... ./tftp/... ./proxydhcp/..."
+# Packages the coverage gate applies to. Narrow this to the packages that
+# matter (e.g. "./internal/..." or the library packages) — gating ./... also
+# gates cmd/ wiring, which is usually exercised by e2e rather than unit tests.
+coverage_packages := "./..."
 
 # Version info derived from git; falls back to dev when not in a repo or tag-less.
 commit_hash := `git rev-parse --short HEAD 2>/dev/null || echo unknown`
@@ -33,7 +38,7 @@ _default:
 [group('build')]
 build: build-core
 
-# Build the core CLI binary into build/bin/booty
+# Build the core CLI binary into build/bin/${project_name}
 [group('build')]
 build-core:
     @mkdir -p {{ bin_dir }}
@@ -78,13 +83,6 @@ test-all: test
 test-pkg pkg:
     @go test -v -race {{ pkg }}
 
-# Run the end-to-end harness (build-tagged; excluded from `just test`).
-# The protocol tier runs anywhere; the QEMU tier skips unless BOOTY_E2E_QEMU,
-# BOOTY_E2E_OVMF_CODE and BOOTY_E2E_IPXE are set (see test/e2e/e2e_test.go).
-[group('test')]
-test-e2e:
-    @go test -v -tags=e2e ./test/e2e
-
 # Run tests with a coverage profile written to coverage.out
 [group('test')]
 test-coverage:
@@ -96,10 +94,10 @@ test-report:
     @go test -coverprofile={{ coverage_out }} ./...
     @go tool cover -html={{ coverage_out }}
 
-# Fail if any library package covers less than {{ coverage_min }}%
+# Fail if any gated package covers less than {{ coverage_min }}%
 [group('test')]
 coverage-gate:
-    @go test -cover {{ library_packages }} 2>&1 | awk -v min={{ coverage_min }} '\
+    @go test -cover {{ coverage_packages }} 2>&1 | awk -v min={{ coverage_min }} '\
         /coverage:/ { \
             if ($0 ~ /no statements/) next; \
             pct = $0; \
