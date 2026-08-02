@@ -1,0 +1,451 @@
+---
+id: IMPL-0001
+title: "Release v0.1.0 of the booty library and the booty binary"
+status: Draft
+author: Donald Gifford
+created: 2026-07-29
+---
+
+<!-- markdownlint-disable-file MD025 MD041 -->
+
+# IMPL 0001: Release v0.1.0 of the booty library and the booty binary
+
+**Status:** Draft **Author:** Donald Gifford **Date:** 2026-07-29
+
+<!--toc:start-->
+
+- [Objective](#objective)
+- [Scope](#scope)
+  - [In Scope](#in-scope)
+  - [Out of Scope](#out-of-scope)
+- [Implementation Phases](#implementation-phases)
+  - [Phase 1: Release plumbing prerequisites](#phase-1-release-plumbing-prerequisites)
+    - [Tasks (Phase 1)](#tasks-phase-1)
+    - [Success Criteria (Phase 1)](#success-criteria-phase-1)
+  - [Phase 2: Package documentation (doc.go per package)](#phase-2-package-documentation-docgo-per-package)
+    - [Tasks (Phase 2)](#tasks-phase-2)
+    - [Success Criteria (Phase 2)](#success-criteria-phase-2)
+  - [Phase 3: CI green on GitHub runners + required checks](#phase-3-ci-green-on-github-runners--required-checks)
+    - [Tasks (Phase 3)](#tasks-phase-3)
+    - [Success Criteria (Phase 3)](#success-criteria-phase-3)
+  - [Phase 4: Cut v0.1.0](#phase-4-cut-v010)
+    - [Tasks (Phase 4)](#tasks-phase-4)
+    - [Success Criteria (Phase 4)](#success-criteria-phase-4)
+  - [Phase 5: Consumer-path validation](#phase-5-consumer-path-validation)
+    - [Tasks (Phase 5)](#tasks-phase-5)
+    - [Success Criteria (Phase 5)](#success-criteria-phase-5)
+- [File Changes](#file-changes)
+- [Testing Plan](#testing-plan)
+- [Dependencies](#dependencies)
+- [Open Questions](#open-questions)
+  - [OQ-1: How Renovate PRs satisfy the PR Label Check](#oq-1-how-renovate-prs-satisfy-the-pr-label-check)
+  - [OQ-2: Scope of the # Usage examples in doc.go](#oq-2-scope-of-the--usage-examples-in-docgo)
+  - [OQ-3: Branch protection mechanism](#oq-3-branch-protection-mechanism)
+  - [OQ-4: Which commit the v0.0.0 seed tag points at](#oq-4-which-commit-the-v000-seed-tag-points-at)
+  - [OQ-5: Linux validation environment for Phase 5](#oq-5-linux-validation-environment-for-phase-5)
+  - [OQ-6: Where the scratch consumer module lives](#oq-6-where-the-scratch-consumer-module-lives)
+- [References](#references)
+
+<!--toc:end-->
+
+## Objective
+
+Execute
+[DESIGN-0001](../design/0001-first-release-of-the-booty-library-and-the-booty-binary.md)
+(Approved): make the wired release pipeline real and cut `v0.1.0` — the first
+public release of the booty library and its reference consumer, the booty binary
+— then validate both from released artifacts only. All of DESIGN-0001's open
+questions are decided; this doc turns those decisions into concrete, checkable
+steps with exact commands. Open questions here are _implementation-level_
+choices the design left unspecified.
+
+**Implements:** DESIGN-0001
+
+## Scope
+
+### In Scope
+
+- Repo plumbing: semver labels, labeler labels, release-signing and Codecov
+  secrets, Renovate verification, branch protection.
+- Package documentation: `doc.go` per library package with final-state comments
+  (DESIGN-0001 OQ-5: "both"), proofread for pkg.go.dev.
+- CI proven green on GitHub runners and promoted to required checks.
+- The `v0.0.0` seed tag, the `minor`-labeled release PR, and the `v0.1.0`
+  release (archives, SBOMs, signed checksums, GHCR image).
+- Consumer-path validation on macOS, Linux, the container image, `go install`,
+  and a scratch importing module.
+
+### Out of Scope
+
+- Everything DESIGN-0001 rules out: v1.0.0 API commitments, Homebrew/nix/apt
+  (OQ-6: defer), QEMU tier in CI (OQ-4: local-only), machinery-based Talos
+  config generation.
+- The docs site — that is
+  [DESIGN-0002](../design/0002-starlight-docs-site-on-cloudflare-pages.md) and
+  will get its own impl doc.
+- Any Go API changes. If validation surfaces one, it is a pre-tag bug fix, not
+  scope.
+
+## Implementation Phases
+
+Each phase builds on the previous one. A phase is complete when all its tasks
+are checked off and its success criteria are met. Phases map 1:1 to
+DESIGN-0001's phases; the PR batching follows OQ-1's decision.
+
+---
+
+### Phase 1: Release plumbing prerequisites
+
+One-time repo configuration. The semver labels come first — the `PR Label Check`
+workflow fails every PR until they exist, so nothing else can merge.
+
+#### Tasks (Phase 1)
+
+- [ ] Create the four semver labels via
+      `gh label create <name> --color <hex> --description "…"`: `major` (B60205,
+      "Release: major version bump"), `minor` (FBCA04, "Release: minor version
+      bump"), `patch` (0E8A16, "Release: patch version bump"), `dont-release`
+      (EDEDED, "Merge without cutting a release").
+- [ ] Verify the ten labels `.github/labeler.yml` references exist (`go`,
+      `dependencies`, `documentation`, `ci`, `repo`, `feature`, `fix`, `chore`,
+      `docs`, `security`); `gh label create` any that are missing.
+- [ ] **(Donald)** Generate the dedicated release-signing GPG key (suggested:
+      `gpg --quick-generate-key "booty release <dgifford06@gmail.com>" ed25519 sign 2y`),
+      then set the secrets: `gh secret set GPG_PRIVATE_KEY` (armored
+      `--export-secret-keys`) and `gh secret set GPG_FINGERPRINT`.
+- [ ] **(Donald)** Export the public key to `docs/booty-release.pub.asc`, commit
+      it, and note the fingerprint in the README Release section.
+- [ ] **(Donald)** Enable the repo on Codecov and `gh secret set CODECOV_TOKEN`.
+- [ ] Confirm the Renovate app covers the repo (onboarding/first PRs appear) and
+      Dependabot alerts are enabled (the `dependabot-severity-label` workflow
+      depends on them).
+- [ ] Add `"labels": ["patch"]` to `renovate.json5` (OQ-1) so Renovate PRs
+      arrive pre-labeled and pass the label check; the rare major-worthy bump
+      gets relabeled by hand before merge.
+- [ ] Open the plumbing-test PR — the pending docs (DESIGN-0001/0002 + this doc)
+      — labeled `dont-release`; confirm `PR Label Check` passes, the labeler
+      applies `docs`/`documentation`, and every CI job triggers.
+
+#### Success Criteria (Phase 1)
+
+- `gh label list` shows all four semver labels plus every label `labeler.yml`
+  references.
+- `gh secret list` shows `GPG_PRIVATE_KEY`, `GPG_FINGERPRINT`, and
+  `CODECOV_TOKEN`; `docs/booty-release.pub.asc` is committed.
+- The test PR passes `PR Label Check`, gets auto-labeled by path, and triggers
+  every CI job (outcomes fixed in Phase 3).
+- Renovate PRs arrive pre-labeled `patch` and pass the label check without
+  manual intervention.
+
+---
+
+### Phase 2: Package documentation (doc.go per package)
+
+DESIGN-0001 OQ-5 decided "both": rewrite every package comment in final-state
+terms **and** house it in a dedicated `doc.go`. Verified starting point: the
+package comments live in the lead files (`catalog/catalog.go`,
+`render/render.go`, `httpsrv/httpsrv.go`, `tftp/tftp.go`,
+`proxydhcp/proxydhcp.go`); `render` and `httpsrv` are stale ("Chapter 6 adds…");
+the guide does **not** quote any `// Package` header verbatim (verified by
+grep), so the guide==code ripple is prose references only.
+
+#### Tasks (Phase 2)
+
+- [ ] For each of the five library packages: create `doc.go`, move the package
+      comment there, delete it from the lead file, and rewrite it to describe
+      the final state (no "Chapter N", no "At this stage").
+- [ ] Rewrite `render` and `httpsrv` comments (confirmed stale); proofread the
+      other three (`tftp`, `proxydhcp` are strong — mostly a move).
+- [ ] Add a prose `# Usage` section with a short fenced snippet to the
+      consumer-facing packages (`catalog`, `render`, `httpsrv`) — no
+      `example_test.go` for v0.1.0 (OQ-2); file the deferred runnable-examples
+      issue.
+- [ ] Keep `cmd/booty/main.go`'s `// Command booty` comment where it is (already
+      final-state; commands conventionally document in `main.go`).
+- [ ] Sweep for stragglers:
+      `grep -rn "Chapter\|At this stage" catalog/ render/ httpsrv/ tftp/ proxydhcp/ cmd/`
+      → zero hits in doc comments (guide-pointer phrasing like "see
+      docs/go-ipxe" is fine).
+- [ ] Guide==code pass: grep the guide for prose references to the moved
+      comments (e.g. "package comment in catalog.go") and update the same PR;
+      chapters that _create_ the lead files stay as-is (they show the historical
+      build, `doc.go` is the final layout).
+- [ ] `just check` green — revive's `exported` rule re-verifies every exported
+      symbol still has its doc.
+- [ ] Proofread rendered output:
+      `go doc -all ./catalog ./render ./httpsrv ./tftp ./proxydhcp | less`.
+- [ ] Add README badges: Go Reference (pkg.go.dev), CI workflow, Codecov. (They
+      may show 404/"unknown" until Phases 4–5 — expected.)
+
+#### Success Criteria (Phase 2)
+
+- Five `doc.go` files exist; no lead file carries the package comment; no doc
+  comment references chapters or in-progress state.
+- `go doc <pkg>` output reads as a standalone pkg.go.dev landing page for all
+  five packages.
+- `just check` passes; the guide contains no stale references to package
+  comments living in lead files.
+
+---
+
+### Phase 3: CI green on GitHub runners + required checks
+
+Per the OQ-1 batching decision, the Phase 2 PR doubles as the matrix-exercising
+PR (it touches Go code + docs, so every job triggers).
+
+#### Tasks (Phase 3)
+
+- [ ] Push the Phase 2 PR (labeled `dont-release`) and drive every job green:
+      golangci-lint, test-coverage + coverage-gate, e2e protocol tier,
+      govulncheck, Trivy, CodeQL, goreleaser snapshot + SBOM locate/scan + SARIF
+      upload, docker bake `booty-ci`.
+- [ ] Verify the SBOM-locate glob (`dist/booty_*_linux_amd64.tar.gz.spdx.json`)
+      resolves on the runner — the snapshot version string differs from local.
+- [ ] Verify the e2e protocol tier's UDP loopback sockets behave on
+      `ubuntu-latest`.
+- [ ] Verify `ghcr.io/donaldgifford/booty:dev-ci` exists after the PR run and
+      both Anchore SARIF categories appear in the Security tab alongside CodeQL.
+- [ ] Verify the Codecov upload succeeds with the new token and the PR gets a
+      coverage comment.
+- [ ] Merge; verify post-merge jobs on `main`: the `ci` bake validation and the
+      changelog workflow run clean.
+- [ ] Create a repository ruleset for `main` (OQ-3) requiring the proven checks
+      — include `PR Label Check`, exclude post-merge-only jobs — plus
+      PR-before-merge and no force-pushes.
+- [ ] Confirm a follow-up trivial PR cannot merge with a failing required check
+      (flip one intentionally or rely on the label check pre-label).
+
+#### Success Criteria (Phase 3)
+
+- One PR cycle with every check green on GitHub runners, and a clean post-merge
+  run on `main`.
+- `main` is protected: required checks enforced, no direct pushes, no
+  force-pushes.
+- Security tab shows CodeQL + both Anchore SARIF categories; Codecov shows the
+  first uploaded report.
+
+---
+
+### Phase 4: Cut v0.1.0
+
+Label flow end-to-end, per DESIGN-0001 OQ-1: seed `v0.0.0`, release PR labeled
+`minor`.
+
+#### Tasks (Phase 4)
+
+- [ ] Seed the baseline tag at the merge commit of the Phase 2/3 PR (OQ-4):
+      `git tag -a v0.0.0 -m "Baseline for pr-semver-bump; not a release" <merge-commit> && git push origin v0.0.0`
+      (no workflow fires on tag push — verified in `.github/workflows/`).
+- [ ] Pre-flight at the release commit: `just ci` and `just release-local` both
+      clean.
+- [ ] Open the release PR (a trivial docs/README touch is fine), label it
+      `minor`, merge it.
+- [ ] Watch `release.yml`: pr-semver-bump tags `v0.1.0` → goreleaser publishes
+      the GitHub release → docker job pushes GHCR.
+- [ ] Verify the release page: 8 archives (linux+darwin × amd64+arm64) each with
+      an `.spdx.json` SBOM, `checksums.txt` + `checksums.txt.sig`, notes grouped
+      by conventional-commit type.
+- [ ] Verify the signature from a clean keyring:
+      `gpg --import docs/booty-release.pub.asc && gpg --verify checksums.txt.sig checksums.txt`.
+- [ ] Verify GHCR: tags `0.1.0`, `0.1`, `v0`, `latest`; OCI annotations render
+      on the package page; SBOM + provenance attestations attached
+      (`docker buildx imagetools inspect`).
+- [ ] Trigger pkg.go.dev indexing:
+      `GOPROXY=proxy.golang.org go list -m github.com/donaldgifford/booty@v0.1.0`;
+      confirm <https://pkg.go.dev/github.com/donaldgifford/booty> renders the
+      Phase 2 docs for all five packages.
+- [ ] Confirm the regenerated `CHANGELOG.md` on `main` includes `v0.1.0`.
+
+#### Success Criteria (Phase 4)
+
+- `v0.1.0` exists as tag + GitHub release with all expected assets and a
+  signature that verifies against the committed public key.
+- `docker pull ghcr.io/donaldgifford/booty:0.1.0` works; `docker run … version`
+  prints `booty v0.1.0` + commit + date.
+- pkg.go.dev shows `booty@v0.1.0` with clean docs and the Apache-2.0 license.
+
+---
+
+### Phase 5: Consumer-path validation
+
+Released artifacts only — no repo checkout in any validation step (the example
+catalog is fetched from the tag, not a working tree).
+
+#### Tasks (Phase 5)
+
+- [ ] macOS/arm64: download `booty_0.1.0_darwin_arm64.tar.gz` from the release
+      page, `shasum -a 256 -c` against `checksums.txt`, extract, and run the
+      README quickstart (`validate`, `serve`, curl `/healthz`,
+      `/machine-config?mac=…`, `POST /proxmox/answer`) against the example
+      catalog fetched at `v0.1.0`.
+- [ ] Linux: repeat with the `linux_arm64` archive inside a plain
+      `debian:stable-slim` container on the mac (OQ-5).
+- [ ] `go install github.com/donaldgifford/booty/cmd/booty@v0.1.0` in a clean
+      environment (empty `GOBIN`/`GOMODCACHE` or a container); `booty version`
+      prints `v0.1.0`.
+- [ ] Container: `docker run` `ghcr.io/donaldgifford/booty:0.1.0 serve` with the
+      catalog + boot dir mounted, `--tftp-addr`/`--proxydhcp-addr` remapped per
+      the nonroot caveat; same curl smoke.
+- [ ] Library consumer smoke in a throwaway local directory, e.g.
+      `/tmp/booty-consumer` (OQ-6): a scratch module importing `catalog`,
+      `render`, `httpsrv` that loads the example catalog and serves `/ipxe` —
+      compiles and runs against `@v0.1.0` using only the public API; record the
+      exact commands in this doc when executed.
+- [ ] File an issue for every friction point found (doc gap, flag surprise,
+      unclear error); mark each fix-now (→ `patch` release) or defer with
+      rationale.
+- [ ] Update the README if anything proved unclear during validation.
+- [ ] Flip DESIGN-0001 → Implemented and this doc → Completed; record the
+      release date in both.
+
+#### Success Criteria (Phase 5)
+
+- The README quickstart works verbatim from released artifacts on macOS, Linux,
+  and the container image.
+- `go install …@v0.1.0` and the scratch-module import both work with no
+  reference to a repo checkout.
+- Zero unresolved release-blocking issues; every deferred item is filed with a
+  rationale.
+
+---
+
+## File Changes
+
+| File                                  | Action | Description                                        |
+| ------------------------------------- | ------ | -------------------------------------------------- |
+| `catalog/doc.go`                      | Create | Package comment moved from `catalog.go`, rewritten |
+| `render/doc.go`                       | Create | Rewritten final-state comment (stale text dropped) |
+| `httpsrv/doc.go`                      | Create | Rewritten final-state comment (stale text dropped) |
+| `tftp/doc.go`                         | Create | Package comment moved from `tftp.go`               |
+| `proxydhcp/doc.go`                    | Create | Package comment moved from `proxydhcp.go`          |
+| `catalog/catalog.go` (+ 4 lead files) | Modify | Package comment removed                            |
+| `docs/booty-release.pub.asc`          | Create | Release-signing public key                         |
+| `renovate.json5`                      | Modify | Add `"labels": ["patch"]` (OQ-1)                   |
+| `README.md`                           | Modify | Badges; key fingerprint; validation-driven fixes   |
+| `docs/go-ipxe/*`                      | Modify | Only if prose references the moved comments        |
+| `CHANGELOG.md`                        | —      | Regenerated by workflow, not hand-edited           |
+
+## Testing Plan
+
+- [ ] `just check` / `just ci` locally before every push (Phases 2–4).
+- [ ] The full CI matrix green on GitHub runners is itself the Phase 3 test.
+- [ ] `just release-local` snapshot before tagging (Phase 4 pre-flight).
+- [ ] Consumer-path smoke tests (Phase 5) are the release's acceptance tests:
+      archive + checksum + quickstart on two OSes, `go install`, container run,
+      scratch-module compile.
+
+## Dependencies
+
+- **(Donald)** GPG key generation, Codecov enablement, and the resulting secrets
+  — blocks Phase 1 completion (labels can land first).
+- GitHub-side state: Renovate app installation, Dependabot alerts,
+  branch-protection permissions.
+- No new Go dependencies.
+
+## Open Questions
+
+All resolved — every question was decided **a** (OQ-1–5 on 2026-07-29, OQ-6 on
+2026-08-02), recorded per question below. Format: **a** was the recommendation;
+later letters were alternatives.
+
+### OQ-1: How Renovate PRs satisfy the PR Label Check
+
+`renovate.json5` only `extends` the upstream `donaldgifford/renovate-config`
+preset — no `labels` — and the label check requires exactly one semver label on
+every PR, so Renovate PRs will sit red until labeled.
+
+- **a. Add `"labels": ["patch"]` to this repo's `renovate.json5`
+  (recommended).** Dependency bumps are patch-by-default; a rare major-worthy
+  bump gets manually relabeled before merge. One line, no upstream change,
+  self-serve forever.
+- b. Add the default in the upstream `renovate-config` preset so every repo
+  inherits it — right long-term home, but changes shared config for a single
+  repo's need and couples this release to another repo's PR cycle.
+- c. Manually label each Renovate PR at review time — zero config, but every
+  update stalls red until a human intervenes, forever.
+
+**Decision (2026-07-29): a** — `"labels": ["patch"]` in this repo's
+`renovate.json5`; relabel the rare major-worthy bump by hand.
+
+### OQ-2: Scope of the `# Usage` examples in doc.go
+
+- **a. Prose `# Usage` with a short fenced code snippet in `catalog`, `render`,
+  and `httpsrv` only; no `example_test.go` for v0.1.0 (recommended).** These
+  three are what an external consumer wires together (the README snippet proves
+  the shape); `tftp`/`proxydhcp` are protocol servers whose comments already
+  explain usage. Runnable `Example` functions are better long-term but add
+  compile-checked surface right before a release — defer to a filed issue.
+- b. Add runnable `example_test.go` `Example` functions for the three
+  consumer-facing packages now — pkg.go.dev renders them interactively and
+  they're compile-checked, at the cost of more pre-release churn.
+- c. No usage sections at all — package comments only, ship the minimum.
+
+**Decision (2026-07-29): a** — prose `# Usage` in `catalog`/`render`/ `httpsrv`
+only; runnable `Example` functions deferred to a filed issue.
+
+### OQ-3: Branch protection mechanism
+
+- **a. A repository ruleset (recommended).** The current-generation mechanism:
+  layerable, supports required checks + PR-before-merge + block-force-push,
+  manageable via `gh api /repos/…/rulesets`, and what GitHub is investing in.
+- b. Classic branch protection on `main` — the familiar option, same practical
+  effect at this repo's scale, but legacy.
+
+**Decision (2026-07-29): a** — repository ruleset.
+
+### OQ-4: Which commit the `v0.0.0` seed tag points at
+
+- **a. The merge commit of the Phase 2/3 PR — the last commit before the release
+  PR (recommended).** Keeps `v0.0.0..v0.1.0` a truthful, tiny changelog range
+  (just the release PR), and the tag lands on fully-CI-proven history.
+- b. The repo's root commit — makes `v0.0.0..v0.1.0` span the whole history, so
+  the first release notes/changelog enumerate everything ever merged (noisy, but
+  a complete record).
+
+**Decision (2026-07-29): a** — tag the merge commit of the Phase 2/3 PR.
+
+### OQ-5: Linux validation environment for Phase 5
+
+- **a. Docker on the mac — run the `linux_arm64` archive inside a plain
+  `debian:stable-slim` container (recommended).** Zero infrastructure, fully
+  scriptable, and it validates the archive (the distroless image is validated
+  separately in the same phase).
+- b. A homelab VM/host — closest to the real deployment target (and could double
+  as a real PXE smoke), but couples release validation to homelab state.
+- c. An ad-hoc GitHub Actions workflow job that downloads the release asset and
+  runs the smoke — repeatable for every future release, but CI code written for
+  a one-time gate.
+
+**Decision (2026-07-29): a** — the `linux_arm64` archive in a
+`debian:stable-slim` container on the mac.
+
+### OQ-6: Where the scratch consumer module lives
+
+- **a. A throwaway local directory (e.g. `/tmp/booty-consumer`), with the exact
+  commands recorded in this doc when executed (recommended).** The point is
+  proving the public API from outside the repo; committing it would create a
+  second consumer to maintain.
+- b. A tiny separate repo (`donaldgifford/booty-consumer-smoke`) — rerunnable
+  for future releases and a public API example, at the cost of another repo to
+  keep compiling.
+- c. In-repo under `examples/consumer/` as a separate Go module — visible to
+  users, but an in-repo module needs care to stay excluded from the main
+  build/test/lint surface.
+
+**Decision (2026-08-02): a** — throwaway local directory; commands recorded here
+when Phase 5 runs.
+
+## References
+
+- [DESIGN-0001 — First release of the booty library and the booty binary](../design/0001-first-release-of-the-booty-library-and-the-booty-binary.md)
+  — the approved design this implements (all design OQs decided 2026-07-29)
+- [ADR-0002 — booty is a library, cmd/booty the reference consumer](../adr/0002-booty-is-a-library-with-cmdbooty-as-reference-consumer.md)
+- `.github/workflows/ci.yml`, `.github/workflows/release.yml`,
+  `.github/workflows/pr-labels.yml` — the pipeline being proven
+- [pr-semver-bump](https://github.com/jefflinse/pr-semver-bump) — label-driven
+  version bump action
+- [goreleaser docs](https://goreleaser.com/) — archives, SBOMs, signs
+- [Go doc comments](https://go.dev/doc/comment) — `doc.go` and `# Usage` section
+  conventions
+- [pkg.go.dev about](https://pkg.go.dev/about) — indexing behavior for new
+  modules
