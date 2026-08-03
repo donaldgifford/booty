@@ -20,7 +20,7 @@ the two are meant to be read side by side.
 
 Recall the state machine from Chapter 1:
 
-```
+```text
 POWER ON → DHCP → TFTP → IPXE_RUNNING → KERNEL_DOWNLOAD → CLOUD_INIT → DONE
                    ▲
                    └── you are here
@@ -64,7 +64,7 @@ integers are big-endian (network byte order).
 **RRQ** — the request. Filename and mode are NUL-terminated ASCII; options are
 optional NUL-terminated key/value pairs appended after the mode:
 
-```
+```text
  2 bytes    string   1 byte   string   1 byte   (string 1byte string 1byte)*
 ┌────────┬──────────┬──────┬────────┬──────┬────────────────────────────────┐
 │ 0x0001 │ filename │  \0  │  mode  │  \0  │ blksize \0 1468 \0 tsize \0 0… │
@@ -76,7 +76,7 @@ modes are dead; we reject anything that isn't `octet`.
 
 **DATA** — opcode, 16-bit block number (starts at 1), then 0–`blksize` bytes:
 
-```
+```text
  2 bytes    2 bytes    n bytes
 ┌────────┬──────────┬──────────┐
 │ 0x0003 │  block#  │   data   │
@@ -86,7 +86,7 @@ modes are dead; we reject anything that isn't `octet`.
 **ACK** — opcode and the block number being acknowledged. Block 0 acknowledges
 an OACK.
 
-```
+```text
  2 bytes    2 bytes
 ┌────────┬──────────┐
 │ 0x0004 │  block#  │
@@ -96,7 +96,7 @@ an OACK.
 **ERROR** — a code and a NUL-terminated human message. Codes: 0 not-defined, 1
 file-not-found, 2 access-violation, 3 disk-full, 4 illegal-operation.
 
-```
+```text
  2 bytes    2 bytes    string   1 byte
 ┌────────┬──────────┬─────────┬──────┐
 │ 0x0005 │  errcode │ message │  \0  │
@@ -120,7 +120,7 @@ func buildDATA(block uint16, data []byte) []byte {
 The single most important — and most surprising — thing about TFTP is that a
 transfer uses **two different server ports**. The exchange:
 
-```
+```text
 client:X → server:69   RRQ "ipxe.efi" octet          (the well-known port)
 server:Y → client:X    DATA block 1                   (Y is a NEW ephemeral port!)
 client:X → server:Y    ACK 1
@@ -211,7 +211,7 @@ a DATA block — listing only the options it accepts (omitting one means
 "declined"). The client confirms with `ACK 0`, and only then does DATA block 1
 flow:
 
-```
+```text
 client → server   RRQ "ipxe.efi" octet blksize 1468 tsize 0
 server → client   OACK blksize 1468 tsize 1138688
 client → server   ACK 0

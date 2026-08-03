@@ -36,7 +36,7 @@ The separation matters: one profile (`talos-worker`) is shared by many machines,
 and each machine reaches it through a group. You maintain one recipe, not one per
 node.
 
-```
+```text
   iPXE request                Catalog
  ┌──────────────┐        ┌──────────────────────────┐
  │ mac=d0:50:.. │        │ group "cp-01"            │

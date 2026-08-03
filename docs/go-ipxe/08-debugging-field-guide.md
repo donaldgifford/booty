@@ -12,7 +12,7 @@ turn "it doesn't boot" into a specific, located failure in under a few minutes.
 The organizing idea, from Chapter 1: a network boot is a state machine, and every
 failure is a *failed transition* between states. booty's states are its endpoints:
 
-```
+```text
 POWER ON → DHCP → TFTP:ipxe.efi → GET /boot.ipxe → GET /ipxe → GET /boot/{kernel,initrd}
                                     (chain script)  (resolve)   (download)
                                                                      │
@@ -192,7 +192,7 @@ sudo tcpdump -i eth0 -n -v "port 67 or port 68 or port 69 or port 8080"
 
 A healthy boot looks like this (abbreviated), and any missing phase is your answer:
 
-```
+```text
 # DHCP — node has no IP yet (source 0.0.0.0), Option 60 marks it PXE
 0.0.0.0.68  > 255.255.255.255.67  DHCP Discover  Option 60 "PXEClient:Arch:00007..."
 192.168.1.1.67 > ...              DHCP Offer     Your-IP 192.168.1.111  next-server 192.168.1.10  file "ipxe.efi"

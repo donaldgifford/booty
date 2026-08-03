@@ -13,7 +13,6 @@ created: 2026-07-29
 **Status:** Draft **Author:** Donald Gifford **Date:** 2026-07-29
 
 <!--toc:start-->
-
 - [Objective](#objective)
 - [Scope](#scope)
   - [In Scope](#in-scope)
@@ -25,9 +24,11 @@ created: 2026-07-29
   - [Phase 2: Package documentation (doc.go per package)](#phase-2-package-documentation-docgo-per-package)
     - [Tasks (Phase 2)](#tasks-phase-2)
     - [Success Criteria (Phase 2)](#success-criteria-phase-2)
+    - [Notes (Phase 2)](#notes-phase-2)
   - [Phase 3: CI green on GitHub runners + required checks](#phase-3-ci-green-on-github-runners--required-checks)
     - [Tasks (Phase 3)](#tasks-phase-3)
     - [Success Criteria (Phase 3)](#success-criteria-phase-3)
+    - [Blocked: the Docs workflow gates every PR on an unbuilt site](#blocked-the-docs-workflow-gates-every-pr-on-an-unbuilt-site)
   - [Phase 4: Cut v0.1.0](#phase-4-cut-v010)
     - [Tasks (Phase 4)](#tasks-phase-4)
     - [Success Criteria (Phase 4)](#success-criteria-phase-4)
@@ -45,7 +46,6 @@ created: 2026-07-29
   - [OQ-5: Linux validation environment for Phase 5](#oq-5-linux-validation-environment-for-phase-5)
   - [OQ-6: Where the scratch consumer module lives](#oq-6-where-the-scratch-consumer-module-lives)
 - [References](#references)
-
 <!--toc:end-->
 
 ## Objective
@@ -275,9 +275,9 @@ just wrote.
 - [x] Push the Phase 2 PR (labeled `dont-release`) and drive every job green:
       golangci-lint, test-coverage + coverage-gate, e2e protocol tier,
       govulncheck, Trivy, CodeQL, goreleaser snapshot + SBOM locate/scan + SARIF
-      upload, docker bake `booty-ci`. **All green** except the two Docs jobs,
-      which are blocked on DESIGN-0002 (see below). Getting there took three
-      fixes: trufflehog's unresolvable tag, the changelog drift check, and two
+      upload, docker bake `booty-ci`. **All green** except the Docs jobs, which
+      are blocked on DESIGN-0002 (see below). Getting there took three fixes:
+      trufflehog's unresolvable tag, the changelog drift check, and two
       reachable CVEs.
 - [x] Verify the SBOM-locate glob (`dist/booty_*_linux_amd64.tar.gz.spdx.json`)
       resolves on the runner — the snapshot version string differs from local.
@@ -291,18 +291,24 @@ just wrote.
       Confirmed: the manifest pushed, and code-scanning reports four analyses —
       `CodeQL /language:go`, `govulncheck`, `Grype anchore-archive-sbom`, and
       `Grype anchore-dev-image`.
+- [x] Turn the `Lint Markdown` Docs job green — borrowed from DESIGN-0002 Phase
+      1/3 as no-regret work, since `docs/` must be lint-clean whichever way the
+      owner resolves `docs.yml`. Added the `lint-md` recipe (markdownlint-cli2 +
+      an anchored MkDocs-admonition guard) and fixed all 49 violations across 13
+      files. Now **0 errors across 24 files**. See the Blocked section below for
+      the full accounting and why `Build Starlight` was left alone.
 - [ ] **Blocked (Donald).** Verify the Codecov upload succeeds with the new
       token and the PR gets a coverage comment. The step runs today but no-ops:
       `CODECOV_TOKEN` is unset and the action has `CC_FAIL_ON_ERROR: false`, so
       it cannot fail the build or report.
 - [ ] **(Donald)** Merge; verify post-merge jobs on `main`: the `ci` bake
       validation and the changelog workflow run clean. Held for an owner
-      decision — the two Docs jobs are red, so merging means either accepting
-      them or resolving the DESIGN-0002 collision first.
+      decision — `Build Starlight` is red, so merging means either accepting it
+      or resolving the DESIGN-0002 collision first.
 - [ ] **(Donald)** Create a repository ruleset for `main` (OQ-3) requiring the
-      proven checks — include `PR Label Check`, exclude post-merge-only jobs and
-      the two Docs jobs until DESIGN-0002 lands — plus PR-before-merge and no
-      force-pushes.
+      proven checks — include `PR Label Check` and `Lint Markdown`, exclude
+      post-merge-only jobs and `Build Starlight` until DESIGN-0002 lands — plus
+      PR-before-merge and no force-pushes.
 - [ ] Confirm a follow-up trivial PR cannot merge with a failing required check
       (flip one intentionally or rely on the label check pre-label).
 
@@ -324,17 +330,38 @@ explicitly out of scope here. Its `paths` filter includes `docs/**`, so it runs
 on any docs-touching PR and both jobs fail:
 
 - **Build Starlight** — there is no `site/` directory. Unfixable without
-  DESIGN-0002 Phase 1.
-- **Lint Markdown** — runs `just lint-md`, a recipe the justfile does not define
+  DESIGN-0002 Phase 1. Still red; still an owner decision.
+- **Lint Markdown** — runs `just lint-md`, a recipe the justfile did not define
   (DESIGN-0002 Phase 1 adds it via `docs.just`). Adding the recipe alone would
-  not turn the job green: `markdownlint-cli2 'docs/**/*.md'` currently reports
+  not have turned the job green: `markdownlint-cli2 'docs/**/*.md'` reported
   **49 errors** in the guide (mostly MD040 fences with no language, plus
-  MD031/MD032/MD036), which is precisely DESIGN-0002 Phase 3's cleanup task.
+  MD031/MD032/MD036), which is DESIGN-0002 Phase 3's cleanup task. **Resolved
+  here** — see below.
 
-So Phase 3's "every check green" criterion cannot be met from inside IMPL-0001.
-This needs an owner decision — see the note in Dependencies. Deliberately not
-absorbed into this phase: silently implementing another design doc's Phase 1 and
-3 here would hide the scope collision rather than resolve it.
+`Lint Markdown` was fixed inside IMPL-0001 because it is no-regret work: `docs/`
+has to be lint-clean under every option the owner might pick for `docs.yml`
+(implement DESIGN-0002, gate the jobs on `site/` existing, or revert the
+workflow), and the cleanup is mechanical and reversible. What landed:
+
+- The `lint-md` recipe in the root `justfile` rather than `docs.just` —
+  DESIGN-0002 can move it when it creates that file. It runs
+  `markdownlint-cli2` and then greps for MkDocs-only admonitions (`!!! note`,
+  `??? note`), which render as literal text in Starlight and must stay out of
+  `docs/` given DESIGN-0002's dual-output decision. The grep is anchored to line
+  start with a trailing space so prose _about_ the syntax — DESIGN-0002 itself
+  discusses it — does not trip the guard.
+- All 49 violations fixed across 13 files: 33 MD040 fence languages, 6 MD036
+  emphasis-labels promoted to `###` headings, and the MD031/MD032/MD009/MD022
+  blank-line rules auto-fixed. **0 errors across 24 files.**
+- `docs/*/README.md` added to `.prettierignore`. docz rewrites the index tables
+  and ToCs in those files on every `docz update`; Prettier re-aligns the pipes
+  and pads the generated blocks, so the two tools were undoing each other.
+  markdownlint is the gate and it passes on docz's native output.
+
+`Build Starlight` remains the single red check and is deliberately not absorbed:
+scaffolding another design doc's Phase 1 here would hide the scope collision
+rather than resolve it. So Phase 3's "every check green" criterion still cannot
+be fully met from inside IMPL-0001 — see the note in Dependencies.
 
 ---
 
@@ -434,10 +461,11 @@ catalog is fetched from the tag, not a working tree).
 | `docs/booty-release.pub.asc`          | Create | Release-signing public key                         |
 | `renovate.json5`                      | Modify | Add `addLabels: ["patch"]` (OQ-1)                  |
 | `.github/workflows/trufflehog.yml`    | Modify | Pin to a resolvable tag; name the workflow/job     |
-| `.prettierignore`                     | Create | Keep Prettier off git-cliff's `CHANGELOG.md`       |
+| `.prettierignore`                     | Create | Keep Prettier off `CHANGELOG.md` + docz's indexes  |
+| `justfile`                            | Modify | Add the `lint-md` recipe the Docs workflow calls   |
 | `go.mod` / `mise.toml` / `Dockerfile` | Modify | x/text v0.39.0; Go 1.26.5 (GO-2026-5970/5856)      |
 | `README.md`                           | Modify | Badges; key fingerprint; validation-driven fixes   |
-| `docs/go-ipxe/*`                      | Modify | Only if prose references the moved comments        |
+| `docs/adr/*`, `docs/go-ipxe/*`        | Modify | Moved-comment refs; markdownlint cleanup (49 fixes) |
 | `CHANGELOG.md`                        | —      | Regenerated by workflow, not hand-edited           |
 
 ## Testing Plan
@@ -455,13 +483,15 @@ catalog is fetched from the tag, not a working tree).
   — blocks Phase 1 completion, and `GPG_PRIVATE_KEY`/`GPG_FINGERPRINT`
   hard-block Phase 4: goreleaser's `signs` block cannot produce
   `checksums.txt.sig` without them, so no release can be cut.
-- **(Donald) Decision needed — the Docs workflow.** `docs.yml` gates every
-  docs-touching PR on a Starlight site that DESIGN-0002 has not built yet, so
-  its two jobs fail on all PRs including this one. Options: (a) implement
-  DESIGN-0002 (it needs its own impl doc first — recommended, since the workflow
-  is already committed and expects it); (b) narrow `docs.yml`'s `paths` or gate
-  its jobs on `site/` existing, so it stops blocking unrelated work until the
-  site lands; (c) revert `docs.yml` from `main` and re-add it with DESIGN-0002.
+- **(Donald) Decision needed — the Docs workflow's `Build Starlight` job.**
+  `docs.yml` gates every docs-touching PR on a Starlight site that DESIGN-0002
+  has not built yet. Its `Lint Markdown` job is now green (see Phase 3), but
+  `Build Starlight` fails on all PRs including this one, because there is no
+  `site/`. Options: (a) implement DESIGN-0002 (it needs its own impl doc first —
+  recommended, since the workflow is already committed and expects it); (b) gate
+  the `build` job on `site/` existing, so it stops blocking unrelated work until
+  the site lands; (c) revert the `build` job from `main` and re-add it with
+  DESIGN-0002. The markdown cleanup already done here is valid under all three.
 - GitHub-side state: Renovate app installation, Dependabot alerts,
   branch-protection permissions.
 - No new Go dependencies.

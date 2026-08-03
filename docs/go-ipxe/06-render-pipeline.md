@@ -7,7 +7,7 @@
 Chapter 4 rendered the boot script, and its kernel command line ended with a
 promise:
 
-```
+```text
 talos.config=http://boot.home.local:8080/machine-config?mac=${mac}
 ```
 
@@ -315,7 +315,7 @@ proxmox-auto-install-assistant prepare-iso proxmox.iso \
 install time, the installer brings up networking and **POSTs a JSON system
 report** to the baked-in URL — and expects a TOML answer file back:
 
-```
+```text
 Installer → POST /proxmox/answer   {"dmi": {"system": {...}}, "network_interfaces": [...]}
 booty     → 200 application/toml   [global] fqdn = "pve-01.home.local" …
 ```

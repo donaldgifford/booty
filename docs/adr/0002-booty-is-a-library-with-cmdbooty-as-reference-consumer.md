@@ -64,7 +64,7 @@ CLAUDE.md's layout and `internal/`-wall guidance are amended to match.
 
 ## Consequences
 
-**Positive**
+### Positive
 
 - The platform can construct catalogs programmatically (as the tests always
   have), implement `Source` over its own state store, mount `Handler()` in its
@@ -76,7 +76,7 @@ CLAUDE.md's layout and `internal/`-wall guidance are amended to match.
 - One module serves both consumers; release/goreleaser flow for the binary is
   unchanged.
 
-**Negative / costs**
+### Negative / costs
 
 - Public API means compatibility pressure. Mitigated by v0 semver (breaking
   changes allowed, flagged in release notes) until the platform consumer
@@ -84,7 +84,7 @@ CLAUDE.md's layout and `internal/`-wall guidance are amended to match.
 - Import-path churn: one mechanical rewrite of `booty/internal/X` → `booty/X`
   across code, tests, and guide prose.
 
-**Neutral**
+### Neutral
 
 - The binary's behavior, flags, and CI are unchanged; `examples/catalog` and the
   e2e tiers keep working as-is.

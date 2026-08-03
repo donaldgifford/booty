@@ -55,7 +55,7 @@ Scope is bounded deliberately:
 
 ## Consequences
 
-**Positive**
+### Positive
 
 - Variables/locals/functions/interpolation eliminate per-node duplication (the
   matchbox rigidity problem) directly in the authoring layer.
@@ -66,7 +66,7 @@ Scope is bounded deliberately:
 - Net-simpler dependency graph than the YAML-plus-TOML alternative, since outputs
   are text-templated.
 
-**Negative / costs**
+### Negative / costs
 
 - Heavier transitive graph than a TOML/YAML library: pulls `zclconf/go-cty`,
   `agext/levenshtein`, `apparentlymart/go-textseg`, `mitchellh/go-wordwrap`, and

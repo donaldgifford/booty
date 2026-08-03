@@ -28,11 +28,9 @@ docz create impl "Your Implementation Title"
 - **Cancelled**: Plan was abandoned
 
 <!-- BEGIN DOCZ AUTO-GENERATED -->
-
 ## All Implementation Plans
 
-| ID        | Title                                                    | Status | Date       | Author         | Link                                                                                                                             |
-| --------- | -------------------------------------------------------- | ------ | ---------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| IMPL-0001 | Release v0.1.0 of the booty library and the booty binary | Draft  | 2026-07-29 | Donald Gifford | [0001-release-v010-of-the-booty-library-and-the-booty-binary.md](0001-release-v010-of-the-booty-library-and-the-booty-binary.md) |
-
+| ID | Title | Status | Date | Author | Link |
+|----|-------|--------|------|--------|------|
+| IMPL-0001 | Release v0.1.0 of the booty library and the booty binary | Draft | 2026-07-29 | Donald Gifford | [0001-release-v010-of-the-booty-library-and-the-booty-binary.md](0001-release-v010-of-the-booty-library-and-the-booty-binary.md) |
 <!-- END DOCZ AUTO-GENERATED -->

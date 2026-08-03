@@ -23,7 +23,7 @@ point is one file.
 
 ## The layout, as it actually is
 
-```
+```text
 cmd/booty/main.go          # thin: flags, wiring, subcommand dispatch
 tftp/tftp.go               # Ch 3 — read-only TFTP, raw UDP
 proxydhcp/proxydhcp.go     # Ch 2 — proxyDHCP + BINL (port 4011)
@@ -130,7 +130,7 @@ It reuses the exact `DirSource.Load` path `serve` uses, so "validates in CI" and
 semantic ones from Chapter 5 — a group pointing at a profile that doesn't exist
 comes out as:
 
-```
+```console
 $ booty validate --catalog ./broken
 invalid catalog dir://broken:
   group "x": references unknown profile "nope"
@@ -287,7 +287,7 @@ var (
 Nothing sets them in source. The linker does, via `-X main.<var>=<value>`. A
 local build through the `justfile` injects the git-derived version and commit:
 
-```
+```bash
 go build -ldflags "-X main.version=$(git describe --tags --always --dirty) \
                    -X main.commit=$(git rev-parse --short HEAD)" ./cmd/booty
 $ booty version

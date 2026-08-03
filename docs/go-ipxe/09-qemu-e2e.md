@@ -114,7 +114,7 @@ TFTP; it's the protocol, and it's the same wire contract Chapter 3 built.
 
 It passes in a fraction of a second, on any machine:
 
-```
+```console
 $ just test-e2e
 === RUN   TestE2EProtocolReachability
 --- PASS: TestE2EProtocolReachability (0.01s)
@@ -236,7 +236,7 @@ if skip != "" {
 On the machine this chapter was written on — and on a default CI runner — that's
 exactly what happens:
 
-```
+```text
 === RUN   TestE2EQEMUBoot
     e2e_test.go: QEMU tier skipped: qemu not found (set BOOTY_E2E_QEMU or install qemu-system-x86_64)
 --- SKIP: TestE2EQEMUBoot (0.00s)
