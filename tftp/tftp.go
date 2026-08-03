@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -79,6 +80,11 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 // fatal read error occurs. Taking a net.PacketConn (rather than only an address)
 // is what makes the server drive-testable: a test can bind 127.0.0.1:0, learn
 // the port from conn.LocalAddr, and cancel ctx to shut it down cleanly.
+//
+// Cancelling ctx stops Serve accepting new requests, but transfers already in
+// progress run to completion before it returns: a client booting from a 200 MB
+// initrd must not have the file truncated because the operator restarted the
+// service.
 func (s *Server) Serve(ctx context.Context, conn net.PacketConn) error {
 	s.logger.Info("TFTP listening", "addr", conn.LocalAddr(), "boot_dir", s.bootDir)
 
@@ -89,12 +95,24 @@ func (s *Server) Serve(ctx context.Context, conn net.PacketConn) error {
 		_ = conn.Close()
 	}()
 
+	// Each transfer owns a separate ephemeral socket (the TID), so closing the
+	// listening conn above does not disturb one mid-flight. Waiting here is what
+	// makes the drain real. It cannot hang on a client that vanishes: every
+	// block is bounded by maxRetries retransmits of transferTimeout each, after
+	// which the transfer gives up.
+	var transfers sync.WaitGroup
+	defer func() {
+		s.logger.Info("TFTP draining in-flight transfers")
+		transfers.Wait()
+	}()
+
 	buf := make([]byte, maxRequestSize)
 	for {
 		n, clientAddr, err := conn.ReadFrom(buf)
 		if err != nil {
 			if ctx.Err() != nil {
-				return nil //nolint:nilerr // a cancelled ctx closed the conn: clean shutdown, not an error
+				// A cancelled ctx closed the conn: clean shutdown, not an error.
+				return nil
 			}
 			return fmt.Errorf("tftp read: %w", err)
 		}
@@ -104,7 +122,7 @@ func (s *Server) Serve(ctx context.Context, conn net.PacketConn) error {
 		// ReadFrom reuses buf; copy before handing to a goroutine.
 		pkt := make([]byte, n)
 		copy(pkt, buf[:n])
-		go s.handleRequest(pkt, clientAddr)
+		transfers.Go(func() { s.handleRequest(pkt, clientAddr) })
 	}
 }
 

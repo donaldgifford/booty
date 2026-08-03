@@ -2,6 +2,7 @@ package proxydhcp
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"io"
 	"log/slog"
@@ -241,6 +242,34 @@ func TestBootFileByArch(t *testing.T) {
 		if got := s.bootFile(arch); got != want {
 			t.Errorf("arch %#x -> %q, want %q", arch, got, want)
 		}
+	}
+}
+
+// TestServeReturnsOnContextCancel pins the exported Serve seam to the same
+// contract tftp.Serve honours: cancelling ctx makes it return. The ctx-to-Close
+// goroutine used to live only in ListenAndServe, so an external consumer calling
+// Serve directly — the seam the doc comment advertises — leaked a goroutine
+// blocked in ReadFrom for the life of the process.
+func TestServeReturnsOnContextCancel(t *testing.T) {
+	s := testServer(t)
+	conn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- s.Serve(ctx, conn, false) }()
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Serve returned %v, want nil on clean shutdown", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve did not return after ctx was cancelled: leaked goroutine")
 	}
 }
 

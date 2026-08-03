@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"sync"
 	"syscall"
 )
 
@@ -137,13 +138,8 @@ func (s *Server) ListenAndServe(ctx context.Context, dhcpAddr, binlAddr string) 
 	s.logger.Info("proxyDHCP listening", "dhcp_addr", dhcpConn.LocalAddr(),
 		"binl_addr", binlConn.LocalAddr(), "server_ip", s.serverIP)
 
-	// Cancelling ctx closes both sockets, unblocking the ReadFrom loops.
-	go func() {
-		<-ctx.Done()
-		_ = dhcpConn.Close()
-		_ = binlConn.Close()
-	}()
-
+	// Each serve call closes its own conn when ctx is done, so no closer is
+	// needed here; the deferred Closes above are the backstop.
 	errc := make(chan error, 2)
 	go func() { errc <- s.serve(ctx, dhcpConn, s.handleDHCP) }()
 	go func() { errc <- s.serve(ctx, binlConn, s.handleBINL) }()
@@ -165,18 +161,33 @@ func (s *Server) Serve(ctx context.Context, conn net.PacketConn, binl bool) erro
 }
 
 func (*Server) serve(ctx context.Context, conn net.PacketConn, handle func(net.PacketConn, []byte, net.Addr)) error {
+	// Cancelling ctx closes conn, which unblocks the ReadFrom below. This lives
+	// here rather than in ListenAndServe so that the exported Serve seam honours
+	// ctx too: a consumer driving Serve directly would otherwise block in
+	// ReadFrom for the life of the process.
+	go func() {
+		<-ctx.Done()
+		_ = conn.Close()
+	}()
+
+	// Replies are single writes, but joining them keeps every goroutine this
+	// function starts from outliving it.
+	var handlers sync.WaitGroup
+	defer handlers.Wait()
+
 	buf := make([]byte, 1500) // one Ethernet MTU; DHCP packets fit easily
 	for {
 		n, src, err := conn.ReadFrom(buf)
 		if err != nil {
 			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
-				return nil //nolint:nilerr // a cancelled ctx closed the conn: clean shutdown, not an error
+				// A cancelled ctx closed the conn: clean shutdown, not an error.
+				return nil
 			}
 			return fmt.Errorf("proxydhcp read: %w", err)
 		}
 		pkt := make([]byte, n)
 		copy(pkt, buf[:n])
-		go handle(conn, pkt, src)
+		handlers.Go(func() { handle(conn, pkt, src) })
 	}
 }
 
