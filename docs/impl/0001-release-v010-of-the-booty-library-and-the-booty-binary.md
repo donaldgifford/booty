@@ -170,8 +170,9 @@ grep), so the guide==code ripple is prose references only.
 - [x] Add a prose `# Usage` section with a short fenced snippet to the
       consumer-facing packages (`catalog`, `render`, `httpsrv`) — no
       `example_test.go` for v0.1.0 (OQ-2).
-- [ ] File the deferred runnable-examples issue (`example_test.go` for
-      `catalog`/`render`/`httpsrv`, per OQ-2).
+- [x] File the deferred runnable-examples issue (`example_test.go` for
+      `catalog`/`render`/`httpsrv`, per OQ-2) —
+      [#1](https://github.com/donaldgifford/booty/issues/1).
 - [x] Keep `cmd/booty/main.go`'s `// Command booty` comment where it is (already
       final-state; commands conventionally document in `main.go`) — verified
       unchanged and rendering correctly.
@@ -189,8 +190,9 @@ grep), so the guide==code ripple is prose references only.
       `go doc -all ./catalog ./render ./httpsrv ./tftp ./proxydhcp | less`.
       Reviewed by the `go-style` agent; five defects found and fixed — see the
       Phase 2 notes below.
-- [ ] Add README badges: Go Reference (pkg.go.dev), CI workflow, Codecov. (They
-      may show 404/"unknown" until Phases 4–5 — expected.)
+- [x] Add README badges: Go Reference (pkg.go.dev), CI workflow, Codecov, Go
+      Report Card, and license. (Go Reference stays "unknown" until the module
+      is indexed in Phase 4, and Codecov until the first upload — expected.)
 
 #### Success Criteria (Phase 2)
 

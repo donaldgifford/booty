@@ -1,5 +1,11 @@
 # booty
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/donaldgifford/booty.svg)](https://pkg.go.dev/github.com/donaldgifford/booty)
+[![CI](https://github.com/donaldgifford/booty/actions/workflows/ci.yml/badge.svg)](https://github.com/donaldgifford/booty/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/donaldgifford/booty/branch/main/graph/badge.svg)](https://codecov.io/gh/donaldgifford/booty)
+[![Go Report Card](https://goreportcard.com/badge/github.com/donaldgifford/booty)](https://goreportcard.com/report/github.com/donaldgifford/booty)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 A Go library for building network-boot services — proxyDHCP, TFTP, iPXE,
 identity matching, and config rendering — plus `booty`, the reference binary
 built from it.
