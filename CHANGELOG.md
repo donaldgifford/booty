@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Bug Fixes
 
 - *(deps)* Bump x/text and Go to clear two reachable vulnerabilities
+- *(justfile)* Pin GOTOOLCHAIN=local for the license recipes
 
 ### Documentation
 
