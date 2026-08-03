@@ -15,6 +15,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(go)* Move package comments to doc.go and rewrite for pkg.go.dev
 - Add README badges and file the runnable-examples follow-up
 - *(impl)* Record Phase 3 CI findings and the DESIGN-0002 blocker
+- *(impl)* Check off the plumbing-test PR task
 
 ### Miscellaneous Tasks
 
