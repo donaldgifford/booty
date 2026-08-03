@@ -381,9 +381,14 @@ Label flow end-to-end, per DESIGN-0001 OQ-1: seed `v0.0.0`, release PR labeled
       `minor`, merge it.
 - [ ] Watch `release.yml`: pr-semver-bump tags `v0.1.0` → goreleaser publishes
       the GitHub release → docker job pushes GHCR.
-- [ ] Verify the release page: 8 archives (linux+darwin × amd64+arm64) each with
-      an `.spdx.json` SBOM, `checksums.txt` + `checksums.txt.sig`, notes grouped
-      by conventional-commit type.
+- [ ] Verify the release page: **4** archives (linux+darwin × amd64+arm64) each
+      with an `.spdx.json` SBOM — 10 assets total with `checksums.txt` +
+      `checksums.txt.sig` — and notes grouped by conventional-commit type.
+      (Corrected from "8 archives" on 2026-08-02: `.goreleaser.yml` declares
+      `goos: [linux, darwin] × goarch: [amd64, arm64]` and one tar.gz archive
+      per target, so 4. A `just release-local` snapshot emitted exactly
+      4 `.tar.gz` + 4 `.spdx.json` + `checksums.txt`; 8 was the archive+SBOM
+      file count, not the archive count.)
 - [ ] Verify the signature from a clean keyring:
       `gpg --import docs/booty-release.pub.asc && gpg --verify checksums.txt.sig checksums.txt`.
 - [ ] Verify GHCR: tags `0.1.0`, `0.1`, `v0`, `latest`; OCI annotations render
