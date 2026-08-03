@@ -39,6 +39,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(proxydhcp)* Exercise handleDHCP instead of only the parser
 - *(httpsrv)* Cover the error branches added by the audit fixes
+- *(catalog)* Budget allocations so the per-group cost cannot creep back
 
 ### Miscellaneous Tasks
 
