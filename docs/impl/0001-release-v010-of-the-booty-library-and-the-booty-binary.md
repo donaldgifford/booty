@@ -473,7 +473,15 @@ Label flow end-to-end, per DESIGN-0001 OQ-1: seed `v0.0.0`, release PR labeled
       `git tag -a v0.0.0 -m "Baseline for pr-semver-bump; not a release" <merge-commit> && git push origin v0.0.0`
       (no workflow fires on tag push — verified in `.github/workflows/`).
 - [ ] Pre-flight at the release commit: `just ci` and `just release-local` both
-      clean.
+      clean. **Cannot be checked off until that commit exists**, but everything
+      it depends on has been verified from this branch, so the step should be a
+      formality rather than a discovery: `just ci` completes (it needed the
+      `GOTOOLCHAIN` fix first), `just release-local` produces 4 archives + 4
+      SBOMs + `checksums.txt`, `goreleaser check` validates `.goreleaser.yml`
+      against the v2 schema, and the Go version agrees across all three places
+      it is pinned — `go.mod`, `mise.toml` and the `Dockerfile` builder stage
+      are all on 1.26.5. That last one is the CLAUDE.md gotcha that bites when
+      only `go.mod` gets bumped.
 - [ ] Open the release PR (a trivial docs/README touch is fine), label it
       `minor`, merge it.
 - [ ] Watch `release.yml`: pr-semver-bump tags `v0.1.0` → goreleaser publishes
