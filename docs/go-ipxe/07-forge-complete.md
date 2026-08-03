@@ -1,6 +1,7 @@
 # Chapter 8: Assembly and the CLI
 
-← [Chapter 7](./06-http-server-stdlib.md) | [Chapter 9: QEMU / OVMF End-to-End →](./09-qemu-e2e.md)
+← [Chapter 7](./06-http-server-stdlib.md) |
+[Chapter 9: QEMU / OVMF End-to-End →](./09-qemu-e2e.md)
 
 ---
 
@@ -11,11 +12,11 @@ discipline that keeps it small.
 
 The rule, stated in booty's `CLAUDE.md` and inherited from PLAN-0001, is that
 `main` parses flags, wires dependencies, and calls into the library — nothing
-else. No business logic, no `init()` doing work at import time, no globals holding
-state. Everything worth testing already lives in the library packages, where the
-tests are. `main` is the part you *can't* unit-test (it reads `os.Args`, it calls
-`os.Exit`), so the design goal is to make that untestable part as close to zero as
-possible.
+else. No business logic, no `init()` doing work at import time, no globals
+holding state. Everything worth testing already lives in the library packages,
+where the tests are. `main` is the part you _can't_ unit-test (it reads
+`os.Args`, it calls `os.Exit`), so the design goal is to make that untestable
+part as close to zero as possible.
 
 Source: [`cmd/booty/main.go`](../../cmd/booty/main.go) — the whole program entry
 point is one file.
@@ -29,13 +30,15 @@ proxydhcp/proxydhcp.go     # Ch 2 — proxyDHCP + BINL (port 4011)
 catalog/{catalog,source}.go  # Ch 5 — identity→group→profile, HCL loader
 render/render.go           # Ch 4 & 6 — iPXE / Talos / cloud-init / Proxmox templating
 httpsrv/httpsrv.go         # Ch 4, 6 & 7 — the stdlib serving core
+*/doc.go                   # per-package godoc — what pkg.go.dev renders
 examples/catalog/*.hcl     # a runnable example catalog
 justfile · .goreleaser.yml · Dockerfile · mise.toml   # build & release
 ```
 
 Two structural facts do a lot of work here. The packages are booty's **public
-library API** ([ADR-0002](../adr/0002-booty-is-a-library-with-cmdbooty-as-reference-consumer.md)):
-`cmd/booty` is the *reference consumer*, importing exactly the same surface any
+library API**
+([ADR-0002](../adr/0002-booty-is-a-library-with-cmdbooty-as-reference-consumer.md)):
+`cmd/booty` is the _reference consumer_, importing exactly the same surface any
 external program (the homelab platform) does — the owned-interface discipline
 (P3) that kept HCL types out of the catalog API is what made those seams safe to
 publish. And the whole thing compiles to a **single static binary**
@@ -77,20 +80,20 @@ func run(args []string) int {
 
 `os.Exit` can't be tested — it terminates the test binary — so it's isolated to
 the one place it's unavoidable. Everything else lives in `run`, which takes its
-args as a parameter and *returns* the exit code instead of calling `os.Exit`. That
-one indirection makes the whole command surface testable: a future `main_test.go`
-can call `run([]string{"booty", "version"})` and assert on the return value,
-because `run` touches no global process state.
+args as a parameter and _returns_ the exit code instead of calling `os.Exit`.
+That one indirection makes the whole command surface testable: a future
+`main_test.go` can call `run([]string{"booty", "version"})` and assert on the
+return value, because `run` touches no global process state.
 
 booty is subcommand-shaped (`booty serve`, `booty validate`), not a single flag
 soup, so dispatch is a `switch` on `args[1]` and each subcommand owns its own
 `flag.FlagSet`. The exit-code convention is the Unix one, and it's deliberate:
 
-| Code | Meaning | Cases |
-|------|---------|-------|
-| `0` | success | `serve` exited cleanly, `validate` passed, `version`, `help` |
-| `1` | runtime failure | catalog load failed, render init failed, a server errored |
-| `2` | usage error | no subcommand, unknown subcommand, bad flags |
+| Code | Meaning         | Cases                                                        |
+| ---- | --------------- | ------------------------------------------------------------ |
+| `0`  | success         | `serve` exited cleanly, `validate` passed, `version`, `help` |
+| `1`  | runtime failure | catalog load failed, render init failed, a server errored    |
+| `2`  | usage error     | no subcommand, unknown subcommand, bad flags                 |
 
 The `2`-vs-`1` split matters for scripting: a CI job can tell "you invoked me
 wrong" (2) from "your config is broken" (1) from "it worked" (0) without parsing
@@ -99,9 +102,10 @@ stderr.
 ## `validate`: the config admission test
 
 `validate` is the smallest subcommand and arguably the most important, because
-it's the **admission test** (PLAN-0001 P2) for configuration. A booting machine is
-a bad place to discover that a catalog has a typo. So a config repo runs `booty
-validate` in CI, and a catalog that doesn't parse and resolve never merges:
+it's the **admission test** (PLAN-0001 P2) for configuration. A booting machine
+is a bad place to discover that a catalog has a typo. So a config repo runs
+`booty validate` in CI, and a catalog that doesn't parse and resolve never
+merges:
 
 ```go
 func cmdValidate(args []string) int {
@@ -133,8 +137,9 @@ invalid catalog dir://broken:
 # exit 1
 ```
 
-That's the dangling-reference check from the catalog's `validate()` firing through
-the CLI gate, exactly where you want it: at review time, not at boot time.
+That's the dangling-reference check from the catalog's `validate()` firing
+through the CLI gate, exactly where you want it: at review time, not at boot
+time.
 
 ## `serve`: wiring the servers together
 
@@ -151,9 +156,9 @@ logFormat  := fs.String("log-format", "text", "log format: text or json")
 ```
 
 Plus the opt-in extras: `--templates-dir` (operator template overrides, layered
-over the embedded set via `render.WithTemplates(os.DirFS(dir))`), `--proxmox-token`
-(bearer auth on `/proxmox/answer`, Chapter 6), and the `--proxydhcp` /
-`--server-ip` pair that enables the Chapter 2 responder.
+over the embedded set via `render.WithTemplates(os.DirFS(dir))`),
+`--proxmox-token` (bearer auth on `/proxmox/answer`, Chapter 6), and the
+`--proxydhcp` / `--server-ip` pair that enables the Chapter 2 responder.
 
 Then the logger is built once and installed as the process default:
 
@@ -164,12 +169,14 @@ slog.SetDefault(logger)
 
 That `slog.SetDefault` is the payoff of the "structured logs via `slog`, set the
 handler in `main`" rule from `CLAUDE.md`: library code that reaches for
-`slog.Default()` gets the configured handler without anyone threading a `*Logger`
-through every constructor. booty mostly passes the logger explicitly (it's a field
-on both servers), but the default is set so nothing logs to a stray handler.
+`slog.Default()` gets the configured handler without anyone threading a
+`*Logger` through every constructor. booty mostly passes the logger explicitly
+(it's a field on both servers), but the default is set so nothing logs to a
+stray handler.
 
-The catalog is loaded eagerly (`cat, ok := loadCatalog(ctx, *catalogDir, logger)`),
-and the helper encodes a deliberate choice about *degraded operation*:
+The catalog is loaded eagerly
+(`cat, ok := loadCatalog(ctx, *catalogDir, logger)`), and the helper encodes a
+deliberate choice about _degraded operation_:
 
 ```go
 func loadCatalog(ctx context.Context, dir string, logger *slog.Logger) (*catalog.Catalog, bool) {
@@ -186,18 +193,18 @@ func loadCatalog(ctx context.Context, dir string, logger *slog.Logger) (*catalog
 }
 ```
 
-A *broken* catalog is fatal (exit 1) — fail fast rather than serve wrong configs.
-But *no* catalog is fine: `cat` stays nil, and recall from Chapter 7 that
-`httpsrv.Handler()` gates its routes on `cat != nil`. So `booty serve` with no
-`--catalog` still answers health, serves the chain script, and serves boot assets
-— it just won't resolve per-machine scripts. That's a genuinely useful mode (a
-plain TFTP+asset server) and it falls out of the dependency-gated construction for
-free.
+A _broken_ catalog is fatal (exit 1) — fail fast rather than serve wrong
+configs. But _no_ catalog is fine: `cat` stays nil, and recall from Chapter 7
+that `httpsrv.Handler()` gates its routes on `cat != nil`. So `booty serve` with
+no `--catalog` still answers health, serves the chain script, and serves boot
+assets — it just won't resolve per-machine scripts. That's a genuinely useful
+mode (a plain TFTP+asset server) and it falls out of the dependency-gated
+construction for free.
 
 ### The concurrency pattern: one context, three servers
 
 This is the heart of assembly, and it's where Chapter 7's decision to make
-lifecycles *context-driven* pays off. One context, cancelled by either signal,
+lifecycles _context-driven_ pays off. One context, cancelled by either signal,
 drives every server — HTTP and TFTP always, proxyDHCP when enabled:
 
 ```go
@@ -244,20 +251,20 @@ Four details are load-bearing:
 
 - **`signal.NotifyContext`** turns a `SIGINT`/`SIGTERM` into a cancelled `ctx` —
   the process's signal policy lives here in `main`, not buried in a library
-  (Chapter 7). Every server observes the *same* `ctx`, so one Ctrl-C drains them
+  (Chapter 7). Every server observes the _same_ `ctx`, so one Ctrl-C drains them
   all in parallel.
 - **`wg.Go`** is the Go 1.25 `WaitGroup.Go` method — it does the `Add(1)` /
   `defer Done()` bookkeeping internally, so the launch site is just "run this
   function in the group." (booty's `go.mod` is on 1.26, so this is available;
-  before 1.25 you'd write the `wg.Add(1); go func(){ defer wg.Done(); … }()` dance
-  the old draft of this chapter used.)
+  before 1.25 you'd write the `wg.Add(1); go func(){ defer wg.Done(); … }()`
+  dance the old draft of this chapter used.)
 - **The buffered `errc` (cap 3)** means a server that errors can post and return
   even if nobody is selecting yet — no goroutine leaks on a fast multi-failure.
-- **`stop()` in the error branch** is the subtle one. If the HTTP server dies (say
-  its port was taken), we cancel `ctx` ourselves so the *healthy* servers also
-  shut down. Without it, one failed server would leave the others running and the
-  process half-alive. `wg.Wait()` then blocks until all have fully drained before
-  `run` returns its exit code.
+- **`stop()` in the error branch** is the subtle one. If the HTTP server dies
+  (say its port was taken), we cancel `ctx` ourselves so the _healthy_ servers
+  also shut down. Without it, one failed server would leave the others running
+  and the process half-alive. `wg.Wait()` then blocks until all have fully
+  drained before `run` returns its exit code.
 
 The result: `SIGTERM` → every server stops accepting, each finishes in-flight
 transfers (that 200 MB initrd gets to complete), all return, process exits 0. A
@@ -266,8 +273,8 @@ server is up and another is wedged.
 
 ## Version metadata via `-ldflags`
 
-`main` declares three variables that are empty-ish by default and filled at build
-time:
+`main` declares three variables that are empty-ish by default and filled at
+build time:
 
 ```go
 var (
@@ -277,8 +284,8 @@ var (
 )
 ```
 
-Nothing sets them in source. The linker does, via `-X main.<var>=<value>`. A local
-build through the `justfile` injects the git-derived version and commit:
+Nothing sets them in source. The linker does, via `-X main.<var>=<value>`. A
+local build through the `justfile` injects the git-derived version and commit:
 
 ```
 go build -ldflags "-X main.version=$(git describe --tags --always --dirty) \
@@ -288,9 +295,10 @@ booty v0.1.0-3-gabc1234 (commit abc1234, built unknown)
 ```
 
 Note `built unknown` — the local recipe injects version and commit but not date;
-only the release path fills all three. `.goreleaser.yml` sets `version`, `commit`,
-*and* `date` (plus `-s -w -trimpath` and `CGO_ENABLED=0`) and cross-compiles the
-matrix — linux+darwin × amd64+arm64 — from that one `main` package:
+only the release path fills all three. `.goreleaser.yml` sets `version`,
+`commit`, _and_ `date` (plus `-s -w -trimpath` and `CGO_ENABLED=0`) and
+cross-compiles the matrix — linux+darwin × amd64+arm64 — from that one `main`
+package:
 
 ```yaml
 ldflags:
@@ -303,8 +311,8 @@ ldflags:
 So `booty version` on a released binary reports the exact tag, commit, and build
 timestamp — the provenance a homelab operator needs to answer "which build is
 actually running on that node?" A plain `go build` with no ldflags honestly
-reports `booty dev (commit none, built unknown)`, which is the correct answer for
-an un-stamped build.
+reports `booty dev (commit none, built unknown)`, which is the correct answer
+for an un-stamped build.
 
 ## Try it yourself
 
@@ -326,29 +334,30 @@ booty serve --catalog examples/catalog --boot-dir /tmp/boot \
 # ^C  →  "shutdown signal received"  →  both drain  →  "booty stopped"
 ```
 
-Everything in the previous five chapters is reachable from those commands. `booty
-validate` is the catalog and its HCL loader; `booty serve` is the render pipeline
-and the stdlib serving core hosting TFTP, HTTP, and (opt-in) proxyDHCP under a
-single cancellable context. The binary is one file, depends on one third-party
-library (HCL), and starts in milliseconds.
+Everything in the previous five chapters is reachable from those commands.
+`booty validate` is the catalog and its HCL loader; `booty serve` is the render
+pipeline and the stdlib serving core hosting TFTP, HTTP, and (opt-in) proxyDHCP
+under a single cancellable context. The binary is one file, depends on one
+third-party library (HCL), and starts in milliseconds.
 
 ## What's deferred
 
 - **Server config in HCL.** Server flags (`--http-addr`, …) are plain `flag`s
-  today. Moving them into an HCL config file reuses the Chapter 5 loader and is a
-  small, later change — the flags stay as overrides.
-- **Graceful catalog reload.** A `SIGHUP` that re-runs `DirSource.Load` and swaps
-  the catalog atomically (no restart) is a natural addition now that load is a pure
-  function returning a fresh `*Catalog`.
+  today. Moving them into an HCL config file reuses the Chapter 5 loader and is
+  a small, later change — the flags stay as overrides.
+- **Graceful catalog reload.** A `SIGHUP` that re-runs `DirSource.Load` and
+  swaps the catalog atomically (no restart) is a natural addition now that load
+  is a pure function returning a fresh `*Catalog`.
 - **The heavier PLAN-0001 surface** — the boot-funnel UI, a SQLite-backed
   inventory, the `machinery` secrets bundle, the bundle/asset pipeline — all sit
-  *after* the walkthrough. What this chapter assembles is the tested, bootable
+  _after_ the walkthrough. What this chapter assembles is the tested, bootable
   core they build on.
 
-With `serve` wired, booty is a real program. The remaining question is whether it
-actually boots a machine — which is what Chapter 9 answers, by driving the whole
-stack from a QEMU VM with UEFI firmware, no hardware required.
+With `serve` wired, booty is a real program. The remaining question is whether
+it actually boots a machine — which is what Chapter 9 answers, by driving the
+whole stack from a QEMU VM with UEFI firmware, no hardware required.
 
 ---
 
-← [Chapter 7](./06-http-server-stdlib.md) | [Chapter 9: QEMU / OVMF End-to-End →](./09-qemu-e2e.md)
+← [Chapter 7](./06-http-server-stdlib.md) |
+[Chapter 9: QEMU / OVMF End-to-End →](./09-qemu-e2e.md)

@@ -1,12 +1,3 @@
-// Package render turns a catalog resolution into the text a booting machine
-// consumes. At this stage it produces iPXE scripts; Chapter 6 adds the Talos
-// machineconfig and cloud-init renderers to the same package and template set.
-//
-// Rendering is the second of the two evaluation phases in booty: the catalog's
-// HCL is evaluated at load time (Chapter 5), and text/template is evaluated here
-// at request time. Keeping them separate is deliberate — the config language and
-// the output language never touch. iPXE's own ${...} variables pass through
-// untouched because Go templates use {{...}} delimiters.
 package render
 
 import (

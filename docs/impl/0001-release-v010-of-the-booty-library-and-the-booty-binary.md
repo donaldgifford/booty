@@ -162,29 +162,33 @@ grep), so the guide==code ripple is prose references only.
 
 #### Tasks (Phase 2)
 
-- [ ] For each of the five library packages: create `doc.go`, move the package
+- [x] For each of the five library packages: create `doc.go`, move the package
       comment there, delete it from the lead file, and rewrite it to describe
       the final state (no "Chapter N", no "At this stage").
-- [ ] Rewrite `render` and `httpsrv` comments (confirmed stale); proofread the
+- [x] Rewrite `render` and `httpsrv` comments (confirmed stale); proofread the
       other three (`tftp`, `proxydhcp` are strong — mostly a move).
-- [ ] Add a prose `# Usage` section with a short fenced snippet to the
+- [x] Add a prose `# Usage` section with a short fenced snippet to the
       consumer-facing packages (`catalog`, `render`, `httpsrv`) — no
-      `example_test.go` for v0.1.0 (OQ-2); file the deferred runnable-examples
-      issue.
-- [ ] Keep `cmd/booty/main.go`'s `// Command booty` comment where it is (already
-      final-state; commands conventionally document in `main.go`).
-- [ ] Sweep for stragglers:
+      `example_test.go` for v0.1.0 (OQ-2).
+- [ ] File the deferred runnable-examples issue (`example_test.go` for
+      `catalog`/`render`/`httpsrv`, per OQ-2).
+- [x] Keep `cmd/booty/main.go`'s `// Command booty` comment where it is (already
+      final-state; commands conventionally document in `main.go`) — verified
+      unchanged and rendering correctly.
+- [x] Sweep for stragglers:
       `grep -rn "Chapter\|At this stage" catalog/ render/ httpsrv/ tftp/ proxydhcp/ cmd/`
-      → zero hits in doc comments (guide-pointer phrasing like "see
-      docs/go-ipxe" is fine).
-- [ ] Guide==code pass: grep the guide for prose references to the moved
-      comments (e.g. "package comment in catalog.go") and update the same PR;
-      chapters that _create_ the lead files stay as-is (they show the historical
-      build, `doc.go` is the final layout).
-- [ ] `just check` green — revive's `exported` rule re-verifies every exported
+      → zero hits. Three were symbol-level docs in `catalog/catalog.go`
+      (`Profile`, `Render`, `Identity`), not just package comments.
+- [x] Guide==code pass: the guide quotes no `// Package` header verbatim, so the
+      only ripple was `07-forge-complete.md`'s "the layout, as it actually is"
+      tree, which now lists `*/doc.go`. Chapters that _create_ the lead files
+      stay as-is (they show the historical build; `doc.go` is the final layout).
+- [x] `just check` green — revive's `exported` rule re-verifies every exported
       symbol still has its doc.
-- [ ] Proofread rendered output:
+- [x] Proofread rendered output:
       `go doc -all ./catalog ./render ./httpsrv ./tftp ./proxydhcp | less`.
+      Reviewed by the `go-style` agent; five defects found and fixed — see the
+      Phase 2 notes below.
 - [ ] Add README badges: Go Reference (pkg.go.dev), CI workflow, Codecov. (They
       may show 404/"unknown" until Phases 4–5 — expected.)
 
@@ -197,12 +201,37 @@ grep), so the guide==code ripple is prose references only.
 - `just check` passes; the guide contains no stale references to package
   comments living in lead files.
 
+#### Notes (Phase 2)
+
+Godoc-rendering defects found by review and fixed — worth knowing before writing
+the next package comment:
+
+- **`a.k.a.` truncates the pkg.go.dev summary.** `go/doc.Synopsis` ends the
+  synopsis at the first period-space, so
+  `"Package proxydhcp implements a PXE proxyDHCP (a.k.a. BINL) service."`
+  rendered as the fragment
+  `"Package proxydhcp implements a PXE proxyDHCP (a.k.a."` — with an unclosed
+  paren — as the package's one-line summary. Avoid abbreviation periods in the
+  first sentence.
+- **Go doc comments have no Markdown.** `*proxy*` and `` `file` `` rendered as
+  literal asterisks and backticks. Use plain words or quotes.
+- **Bare repo-relative paths are inert on pkg.go.dev.** The `docs/go-ipxe/*.md`
+  pointers are now full `https://github.com/...` URLs, so an external consumer
+  arriving from `go get` can actually follow them.
+- **A doc claim was factually wrong.** The inherited `proxydhcp` comment called
+  `parsePacket`, `buildProxyOffer`, and `buildBootAck` "pure functions"; the
+  latter two are `(*Server)` methods reading `s.serverIP` / `s.bootFile`.
+  Reworded to "side-effect-free helpers".
+- Doc links (`[Source]`, `[net/http]`, `[net/http.Handler]`, and the full import
+  path `[github.com/donaldgifford/booty/catalog]`) were verified to resolve, and
+  every `# Usage` snippet was checked against the real signatures.
+
 ---
 
 ### Phase 3: CI green on GitHub runners + required checks
 
-Per the OQ-1 batching decision, the Phase 2 PR doubles as the matrix-exercising
-PR (it touches Go code + docs, so every job triggers).
+The Phase 2 PR doubles as the matrix-exercising PR (it touches Go code + docs,
+so every job triggers).
 
 #### Tasks (Phase 3)
 

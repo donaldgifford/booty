@@ -1,8 +1,3 @@
-// Package httpsrv is booty's stdlib HTTP serving core. It routes the boot-time
-// HTTP surface: health checks, the chainload and per-machine iPXE scripts, and
-// the boot-asset (kernel/initrd) files. Chapter 6 adds the machineconfig and
-// cloud-init endpoints to the same mux. The package is named httpsrv rather than
-// http so it never shadows the standard library's net/http inside its own files.
 package httpsrv
 
 import (

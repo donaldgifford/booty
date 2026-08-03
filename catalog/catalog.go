@@ -1,16 +1,3 @@
-// Package catalog is booty's desired-state model: the set of boot profiles and
-// the group rules that match a booting machine to one of them. It is fed by a
-// Source (a dir:// tree of HCL today; git:// and platform:// later) and answers
-// one question at request time: "this machine has these identity attributes —
-// which profile, and which variables, apply to it?"
-//
-// The matching model is deliberately matchbox-shaped (groups select machines by
-// identity attributes and bind them to profiles), because that separation is the
-// part of matchbox worth keeping. See docs/go-ipxe/05-catalog-and-matcher.md.
-//
-// The domain types in this file carry no hcl/cty types; all HCL decoding and
-// expression evaluation is quarantined in source.go, so the third-party config
-// language never leaks into the matcher or (later) the renderer (PLAN-0001 P3).
 package catalog
 
 import (
@@ -29,7 +16,7 @@ type Catalog struct {
 
 // Profile is a named boot recipe: what to boot (kernel/initrd/cmdline) and what
 // per-machine config to render for machines assigned to it. Vars are arbitrary
-// key/values exposed to templates in the render stage (Chapter 6).
+// key/values exposed to templates at render time.
 type Profile struct {
 	Name   string
 	Boot   *Boot
@@ -45,8 +32,8 @@ type Boot struct {
 }
 
 // Render names which renderer produces the machine config and the template it
-// uses (consumed in Chapter 6). Kept as opaque strings here so this package
-// stays independent of the renderers.
+// uses. Kept as opaque strings here so this package stays independent of the
+// renderers.
 type Render struct {
 	Kind     string `hcl:"kind,optional"`
 	Template string `hcl:"template,optional"`
@@ -63,8 +50,8 @@ type Group struct {
 }
 
 // Identity is the normalized set of attributes booty knows about a booting
-// machine. In production these come from the iPXE request (Chapter 4); in tests
-// they are set directly. Selectors match against these keys.
+// machine. In production these come from the iPXE request; in tests they are
+// set directly. Selectors match against these keys.
 type Identity struct {
 	MAC          string
 	UUID         string

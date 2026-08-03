@@ -1,17 +1,3 @@
-// Package tftp implements a minimal, read-only TFTP server (RFC 1350) with
-// blksize/tsize/timeout option negotiation (RFC 2347–2349), using only the Go
-// standard library.
-//
-// TFTP is the one protocol booty must speak at the firmware stage of a network
-// boot: a UEFI/BIOS PXE client that has just learned "next-server + filename"
-// from DHCP can only fetch that file over TFTP — its firmware has no TCP/HTTP
-// stack. booty serves the iPXE binary (and, in constrained environments,
-// kernels/initrds) here, then gets out of the way once iPXE takes over on HTTP.
-//
-// The design follows the TFTP transfer-identifier (TID) model: the main socket
-// on :69 receives only the initial RRQ, and every transfer then moves to its
-// own ephemeral socket. See docs/go-ipxe/03-tftp-from-scratch.md for the
-// wire-level walkthrough.
 package tftp
 
 import (
