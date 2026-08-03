@@ -425,20 +425,59 @@ after v0.1.0**, so they belong before Phase 4 rather than after:
   guards are lexical, so a symlink in the boot dir escapes it — accepted
   explicitly in `docs/go-ipxe/03-tftp-from-scratch.md`, but `tftp.go`'s comment
   still claims the path is "guaranteed" to sit under `bootDir`, which is false.
-- **Performance — first measured data.** The repo had no benchmarks at all, so
-  nothing here was ever measured. A profile of the `/ipxe` boot path shows cost
-  growing linearly with catalog size — 22 µs and 158 allocations against 8
-  groups, 209 µs and 1,732 allocations against 128 — and
-  `Match` → `matchSelector` → `NormalizeMAC` accounts for **19.9% of all bytes
-  allocated** in that path. The cause is that `matchSelector` re-normalizes each
-  group's selector MAC on every request, so a 128-group catalog repeats that
-  work 128 times per booting machine. Two fixes, both cheap: hoist the
-  `strings.NewReplacer` out of `NormalizeMAC` (it compiles a trie per call), and
-  normalize selector MACs once at load instead of per match. The second is a
-  visible change to `Catalog.Groups` data, so it is deliberately left for OQ-7
-  rather than slipped in. Nothing else is hot: `parsePacket` is 219 ns / 5
-  allocs and `handleDHCP` 1.9 µs / 20 allocs, which no realistic PXE burst will
-  notice.
+- **Performance — fixed.** The repo had no benchmarks, so nothing here had ever
+  been measured. One line of accidental per-request work was costing roughly
+  90% of every boot request: `NormalizeMAC` built its `strings.NewReplacer`
+  inline, and because the replacements are empty strings that falls to the
+  generic trie replacer, which allocates ~6.7 kB **at construction**. `Match`
+  called it twice per group, so a request against a 128-group catalog built
+  ~250 tries and allocated 1.69 MiB.
+
+  Fixed by hoisting the replacer to package scope and normalizing the
+  identity's MAC once per `Match` instead of once per group. Measured:
+
+  | Path                      | Before   | After   |
+  | ------------------------- | -------- | ------- |
+  | `/ipxe`, 128 groups       | 216 µs   | 20 µs   |
+  | `/ipxe`, 128 groups B/op  | 1686 KiB | 16 KiB  |
+  | `/machine-config`         | 247 µs   | 19 µs   |
+  | `/ipxe` parallel          | 239 µs   | 10 µs   |
+  | `NormalizeMAC`            | 656 ns   | 81 ns   |
+
+  The parallel number is the tell: before the fix, concurrent requests were
+  _slower_ than serial (239 µs vs 216 µs), because every core producing 1.7 MB
+  of garbage kept the process in continuous GC. It scales properly now.
+
+  Everything else was checked and is right for this workload, so no release
+  time should go into it. TFTP per-block allocation was implemented and A/B'd:
+  it removes 95% of the garbage and buys 0–5% throughput, because stop-and-wait
+  TFTP is round-trip bound (`syscall` 71% of profile, `mallocgc` not in the top
+  25) — reverted as clarity traded for nothing. TFTP is not the bulk path
+  anyway; the initrd comes over HTTP, where `http.ServeFile` already gets
+  sendfile and ranges and sustains 2.8–7.1 GB/s. `render` is 3.6 µs per script,
+  `parsePacket` 136 ns, and the O(n) group scan is 30 ns/group once
+  normalization is fixed — a map index cannot express most-specific-wins
+  semantics anyway. Normalizing selector MACs at load would save a further
+  ~6 ms across an entire rack boot, which does not justify mutating
+  user-visible `Group.Selector` data; left for OQ-7.
+- **Robustness — a failed TFTP transfer used to hang the client.** Found while
+  benchmarking. On darwin a negotiated `blksize` above `net.inet.udp.maxdgram`
+  (9216) makes every DATA write fail with EMSGSIZE; the server accepts and
+  OACKs any size up to `maxBlockSize` (65464), logged the failure, and sent
+  nothing, so the client waited out its own timeout with no explanation on the
+  wire. booty ships darwin binaries. Fixed: a failed transfer now sends an
+  ERROR packet on the transfer's own socket (any other port is a different TID
+  and the client would discard it, RFC 1350 §4). Capping the accepted `blksize`
+  is the belt-and-braces version and is not done — iPXE asks for 1468 anyway,
+  which is correct on a real LAN since anything above ~1472 IP-fragments.
+- **Robustness — unanswered RRQs pin sockets.** Measured, not inferred: 200
+  unanswered RRQs take the process from 3 goroutines to 204, each holding a UDP
+  socket for exactly 20 s (`maxRetries+1` × `transferTimeout`). At 1000 spoofed
+  RRQ/s that is 20,000 file descriptors. It does not bite a real rack (200
+  machines is fine, and concurrent transfers scale to 200 MB/s aggregate), but
+  it is the same unauthenticated-UDP exposure as OQ-8 and belongs with that
+  decision. `tftp/perf_fanout_test.go` reproduces it; it is env-guarded and
+  skips unless `BOOTY_FANOUT` is set.
 - **Tooling — correction.** An earlier revision of this section said `gosec` was
   not enabled. That was wrong, and it is worth recording how: the security pass
   reported it, and it was written down here without being checked. `gosec` has

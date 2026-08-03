@@ -206,6 +206,16 @@ func (s *Server) handleRRQ(data []byte, clientAddr net.Addr) {
 	start := time.Now()
 	if err := s.sendFile(xferConn, clientAddr, f, blockSize); err != nil {
 		s.logger.Error("TFTP transfer failed", "file", filename, "client", clientAddr, "err", err)
+		// Tell the client the transfer is dead rather than letting it wait for a
+		// DATA block that will never come. This is not hypothetical: on darwin a
+		// negotiated blksize above net.inet.udp.maxdgram (9216) makes every write
+		// fail with EMSGSIZE, and booty ships darwin binaries — the client used
+		// to hang until its own timeout with nothing on the wire to explain why.
+		// The ERROR goes out on the transfer's own socket because a datagram
+		// from any other port is a different TID and the client discards it
+		// (RFC 1350 §4).
+		errPkt := buildERROR(errNotDefined, "transfer failed")
+		_, _ = xferConn.WriteTo(errPkt, clientAddr) //nolint:errcheck // best effort
 		return
 	}
 	elapsed := time.Since(start)
