@@ -54,7 +54,7 @@ func (s DirSource) Load(ctx context.Context) (*Catalog, error) {
 	for _, p := range paths {
 		f, diags := parser.ParseHCLFile(p)
 		if diags.HasErrors() {
-			return nil, fmt.Errorf("parsing %s: %s", p, diags.Error())
+			return nil, fmt.Errorf("parsing %s: %w", p, diags)
 		}
 		files = append(files, f)
 	}
@@ -80,7 +80,7 @@ func decodeCatalog(files []*hcl.File, overrides map[string]string) (*Catalog, er
 	body := hcl.MergeFiles(files)
 	content, diags := body.Content(catalogSchema)
 	if diags.HasErrors() {
-		return nil, fmt.Errorf("catalog structure: %s", diags.Error())
+		return nil, fmt.Errorf("catalog structure: %w", diags)
 	}
 
 	funcs := evalFuncs()
@@ -115,7 +115,7 @@ func decodeCatalog(files []*hcl.File, overrides map[string]string) (*Catalog, er
 			Vars   map[string]string `hcl:"vars,optional"`
 		}
 		if d := gohcl.DecodeBody(b.Body, ctx, &pb); d.HasErrors() {
-			return nil, fmt.Errorf("profile %q: %s", name, d.Error())
+			return nil, fmt.Errorf("profile %q: %w", name, d)
 		}
 		cat.Profiles[name] = Profile{Name: name, Boot: pb.Boot, Render: pb.Render, Vars: pb.Vars}
 	}
@@ -128,7 +128,7 @@ func decodeCatalog(files []*hcl.File, overrides map[string]string) (*Catalog, er
 			Vars     map[string]string `hcl:"vars,optional"`
 		}
 		if d := gohcl.DecodeBody(b.Body, ctx, &gb); d.HasErrors() {
-			return nil, fmt.Errorf("group %q: %s", name, d.Error())
+			return nil, fmt.Errorf("group %q: %w", name, d)
 		}
 		cat.Groups = append(cat.Groups, Group{
 			Name: name, Profile: gb.Profile, Selector: gb.Selector, Vars: gb.Vars,
@@ -153,13 +153,13 @@ func evalVariables(blocks hcl.Blocks, funcs map[string]function.Function, overri
 			Remain  hcl.Body       `hcl:",remain"` // tolerate type/description/etc.
 		}
 		if d := gohcl.DecodeBody(b.Body, base, &decl); d.HasErrors() {
-			return nil, fmt.Errorf("variable %q: %s", name, d.Error())
+			return nil, fmt.Errorf("variable %q: %w", name, d)
 		}
 		val := cty.NullVal(cty.DynamicPseudoType)
 		if decl.Default != nil {
 			v, d := decl.Default.Value(base)
 			if d.HasErrors() {
-				return nil, fmt.Errorf("variable %q default: %s", name, d.Error())
+				return nil, fmt.Errorf("variable %q default: %w", name, d)
 			}
 			val = v
 		}
@@ -179,7 +179,7 @@ func evalLocals(blocks hcl.Blocks, vars map[string]cty.Value, funcs map[string]f
 	for _, b := range blocks {
 		attrs, diags := b.Body.JustAttributes()
 		if diags.HasErrors() {
-			return nil, fmt.Errorf("locals: %s", diags.Error())
+			return nil, fmt.Errorf("locals: %w", diags)
 		}
 		for name, a := range attrs {
 			if _, dup := exprs[name]; dup {

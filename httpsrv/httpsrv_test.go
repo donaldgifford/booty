@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -384,5 +385,70 @@ func TestRoutesGatedByDeps(t *testing.T) {
 	h := New(Options{Logger: quiet()}).Handler()
 	if rec := get(t, h, "/ipxe?mac=x"); rec.Code != http.StatusNotFound {
 		t.Fatalf("/ipxe without catalog = %d, want 404", rec.Code)
+	}
+}
+
+// TestBootDirectoryListingRefused pins the fix for an information disclosure:
+// GET /boot/ resolved to bootDir itself, the traversal guard allowed it (the
+// path is inside bootDir), and http.ServeFile fell through to its HTML index,
+// enumerating every boot asset to any unauthenticated caller.
+func TestBootDirectoryListingRefused(t *testing.T) {
+	bootDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bootDir, "vmlinuz"), []byte("kernel"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(bootDir, "talos"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := newTestServer(t, Options{BootDir: bootDir})
+
+	for _, target := range []string{"/boot/", "/boot/talos", "/boot/talos/"} {
+		rec := get(t, h, target)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", target, rec.Code)
+		}
+		if strings.Contains(rec.Body.String(), "vmlinuz") {
+			t.Errorf("GET %s leaked a directory listing: %q", target, rec.Body.String())
+		}
+	}
+
+	// A real asset must still be served.
+	if rec := get(t, h, "/boot/vmlinuz"); rec.Code != http.StatusOK || rec.Body.String() != "kernel" {
+		t.Errorf("GET /boot/vmlinuz = %d %q, want 200 \"kernel\"", rec.Code, rec.Body.String())
+	}
+}
+
+// TestIdentityRejectsControlCharacters pins the fix for a template-injection
+// path. Identity strings are interpolated into the YAML and TOML that render
+// produces, and text/template does not escape, so a newline in the MAC let a
+// machine append keys the operator never wrote — root_ssh_keys in a Proxmox
+// answer file, or an install block in a machineconfig. booty exists to decide
+// centrally what a machine installs, so a machine editing its own answer is a
+// policy bypass.
+func TestIdentityRejectsControlCharacters(t *testing.T) {
+	h := newTestServer(t, Options{Catalog: bootCatalog()})
+	injected := url.QueryEscape("d0:50:99:b3:4c:50\nroot_ssh_keys = [\"attacker\"]")
+
+	rec := get(t, h, "/machine-config?arch=x86_64&mac="+injected)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("machine-config with an injected MAC = %d, want 400", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "attacker") {
+		t.Errorf("response echoed the injected payload: %q", rec.Body.String())
+	}
+
+	// /ipxe answers with a script rather than a status code, but must not match.
+	rec = get(t, h, "/ipxe?arch=x86_64&mac="+injected)
+	body := rec.Body.String()
+	if !strings.HasPrefix(body, "#!ipxe") {
+		t.Errorf("ipxe reply is not a script: %q", body)
+	}
+	if strings.Contains(body, "attacker") {
+		t.Errorf("ipxe script echoed the injected payload: %q", body)
+	}
+
+	// A clean MAC still resolves.
+	if rec := get(t, h, "/ipxe?arch=x86_64&mac=d0:50:99:b3:4c:50"); rec.Code != http.StatusOK {
+		t.Errorf("clean MAC = %d, want 200", rec.Code)
 	}
 }

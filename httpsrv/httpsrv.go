@@ -5,11 +5,13 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -146,7 +148,13 @@ func (s *Server) handleChain(w http.ResponseWriter, r *http.Request) {
 // handleIPXE is the core boot handler: derive identity from the query the chain
 // script supplied, match it to a profile, and render that profile's boot script.
 func (s *Server) handleIPXE(w http.ResponseWriter, r *http.Request) {
-	id := identityFromQuery(r.URL.Query())
+	id, err := identityFromQuery(r.URL.Query())
+	if err != nil {
+		// Still a script, not a status code: iPXE handles non-200 badly.
+		s.logger.Warn("ipxe: rejected identity", "remote", r.RemoteAddr, "err", err)
+		writeIPXE(w, errorScript("invalid identity"))
+		return
+	}
 	s.logger.Info("ipxe request", "mac", id.MAC, "ip", id.IP, "arch", id.Arch, "remote", r.RemoteAddr)
 
 	res, err := s.catalog.Match(id)
@@ -184,6 +192,15 @@ func (s *Server) handleBoot(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	// Boot assets are files. Without this, GET /boot/ resolves to bootDir itself
+	// and http.ServeFile falls through to its HTML directory index, enumerating
+	// every asset and subdirectory on the server. 404 rather than 403 so the
+	// response does not confirm what is a directory.
+	info, err := os.Stat(fullAbs)
+	if err != nil || info.IsDir() {
+		http.NotFound(w, r)
+		return
+	}
 	// http.ServeFile gives us Range requests, ETag/Last-Modified, HEAD, and
 	// sendfile-backed streaming for the large files — everything a boot needs.
 	http.ServeFile(w, r, fullAbs)
@@ -194,7 +211,12 @@ func (s *Server) handleBoot(w http.ResponseWriter, r *http.Request) {
 // identity arrives as query parameters (same as /ipxe). Unlike /ipxe, ordinary
 // HTTP status codes are fine here — Talos retries on error.
 func (s *Server) handleMachineConfig(w http.ResponseWriter, r *http.Request) {
-	id := identityFromQuery(r.URL.Query())
+	id, err := identityFromQuery(r.URL.Query())
+	if err != nil {
+		s.logger.Warn("machine-config: rejected identity", "remote", r.RemoteAddr, "err", err)
+		http.Error(w, "invalid identity", http.StatusBadRequest)
+		return
+	}
 	res, err := s.catalog.Match(id)
 	if err != nil {
 		s.logger.Warn("machine-config: no match", "mac", id.MAC, "err", err)
@@ -267,8 +289,18 @@ func (s *Server) handleProxmoxAnswer(w http.ResponseWriter, r *http.Request) {
 		Product:      info.DMI.System.Name,
 		Manufacturer: info.DMI.System.Manufacturer,
 	}
+	if err := validateIdentity(base); err != nil {
+		s.logger.Warn("proxmox: rejected identity", "remote", r.RemoteAddr, "err", err)
+		http.Error(w, "invalid identity", http.StatusBadRequest)
+		return
+	}
 	macs := make([]string, 0, len(info.NICs))
 	for _, nic := range info.NICs {
+		if strings.ContainsFunc(nic.MAC, isControl) {
+			s.logger.Warn("proxmox: rejected NIC MAC", "remote", r.RemoteAddr)
+			http.Error(w, "invalid identity", http.StatusBadRequest)
+			return
+		}
 		macs = append(macs, nic.MAC)
 	}
 	if len(macs) == 0 {
@@ -402,8 +434,18 @@ func (s *Server) effectiveBaseURL(r *http.Request) string {
 }
 
 // identityFromQuery maps the chain script's query parameters onto an Identity.
-func identityFromQuery(q url.Values) catalog.Identity {
-	return catalog.Identity{
+// identityFromQuery reads a machine's identity attributes from the query string.
+//
+// It rejects values containing control characters. These strings are
+// interpolated into the YAML and TOML documents render produces, text/template
+// performs no escaping, and an embedded newline therefore lets a machine append
+// keys the operator never authored — root_ssh_keys in a Proxmox answer file, or
+// an install block in a Talos machineconfig. Since booty exists to decide
+// centrally what a machine installs, letting the machine edit its own answer
+// defeats the point. No legitimate MAC, UUID, serial, hostname or product
+// string contains a control character.
+func identityFromQuery(q url.Values) (catalog.Identity, error) {
+	id := catalog.Identity{
 		MAC:          q.Get("mac"),
 		UUID:         q.Get("uuid"),
 		Serial:       q.Get("serial"),
@@ -413,6 +455,34 @@ func identityFromQuery(q url.Values) catalog.Identity {
 		Product:      q.Get("product"),
 		Manufacturer: q.Get("manufacturer"),
 	}
+	return id, validateIdentity(id)
+}
+
+// validateIdentity rejects identity values containing control characters. See
+// identityFromQuery for why. It applies to every source of identity, not just
+// the query string: the Proxmox installer supplies its DMI strings and NIC MACs
+// in a POST body, which is no more trustworthy.
+func validateIdentity(id catalog.Identity) error {
+	for _, f := range []struct{ name, value string }{
+		{"mac", id.MAC},
+		{"uuid", id.UUID},
+		{"serial", id.Serial},
+		{"hostname", id.Hostname},
+		{"ip", id.IP},
+		{"product", id.Product},
+		{"manufacturer", id.Manufacturer},
+	} {
+		if strings.ContainsFunc(f.value, isControl) {
+			return fmt.Errorf("identity field %q contains a control character", f.name)
+		}
+	}
+	return nil
+}
+
+// isControl reports whether r is a C0/C1 control character — the class that lets
+// a value escape the line it was rendered on.
+func isControl(r rune) bool {
+	return r < 0x20 || (r >= 0x7f && r <= 0x9f)
 }
 
 // normalizeArch maps iPXE's ${buildarch} spellings to the values catalog
