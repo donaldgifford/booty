@@ -14,6 +14,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Add DESIGN-0001, DESIGN-0002, and IMPL-0001 release docs
 - *(go)* Move package comments to doc.go and rewrite for pkg.go.dev
 - Add README badges and file the runnable-examples follow-up
+- *(impl)* Record Phase 3 CI findings and the DESIGN-0002 blocker
 
 ### Miscellaneous Tasks
 
