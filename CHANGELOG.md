@@ -11,6 +11,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(justfile)* Pin GOTOOLCHAIN=local for the license recipes
 - *(tftp,proxydhcp)* Honour ctx cancellation on shutdown
 - *(httpsrv,catalog)* Close two injection paths found in the pre-release audit
+- *(catalog,tftp)* Distinguish a broken catalog, bound the OACK timeout
 
 ### Documentation
 
