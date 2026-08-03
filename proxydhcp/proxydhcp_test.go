@@ -76,6 +76,31 @@ func findSubOption(t *testing.T, opt43 []byte, tag byte) ([]byte, bool) {
 	return nil, false
 }
 
+// sentPacket is one datagram captured by captureConn.
+type sentPacket struct {
+	payload []byte
+	dst     net.Addr
+}
+
+// captureConn is a net.PacketConn that records WriteTo instead of touching the
+// network, so the handlers can be driven directly. Only WriteTo is exercised;
+// the rest satisfy the interface.
+type captureConn struct {
+	sent []sentPacket
+}
+
+func (c *captureConn) WriteTo(p []byte, addr net.Addr) (int, error) {
+	c.sent = append(c.sent, sentPacket{payload: append([]byte(nil), p...), dst: addr})
+	return len(p), nil
+}
+
+func (*captureConn) ReadFrom([]byte) (int, net.Addr, error) { return 0, nil, io.EOF }
+func (*captureConn) Close() error                           { return nil }
+func (*captureConn) LocalAddr() net.Addr                    { return &net.UDPAddr{} }
+func (*captureConn) SetDeadline(time.Time) error            { return nil }
+func (*captureConn) SetReadDeadline(time.Time) error        { return nil }
+func (*captureConn) SetWriteDeadline(time.Time) error       { return nil }
+
 func TestNewRejectsBadIP(t *testing.T) {
 	if _, err := New(Config{ServerIP: "not-an-ip"}); err == nil {
 		t.Fatal("want error for invalid ServerIP")
@@ -219,12 +244,103 @@ func TestBootFileByArch(t *testing.T) {
 	}
 }
 
-func TestHandleDHCPIgnoresNonPXE(t *testing.T) {
-	// A plain (non-PXE) DISCOVER must be ignored, so booty never disturbs ordinary
-	// DHCP traffic owned by the real server.
-	req, _ := parsePacket(craftRequest(msgDISCOVER, 0x0000, false, nil))
-	if req.isPXE {
-		t.Fatal("non-PXE request should not be flagged PXE")
+// TestHandleDHCPStaysSilent drives handleDHCP itself rather than the parser: the
+// property that matters is that nothing reaches the wire. booty shares a
+// broadcast domain with somebody else's DHCP server, so replying to anything
+// that is not a PXE DISCOVER would interfere with leases booty does not own.
+func TestHandleDHCPStaysSilent(t *testing.T) {
+	s := testServer(t)
+
+	badCookie := craftRequest(msgDISCOVER, 0x0007, true, nil)
+	binary.BigEndian.PutUint32(badCookie[236:240], 0)
+
+	bootReply := craftRequest(msgDISCOVER, 0x0007, true, nil)
+	bootReply[0] = opBOOTREPLY // our own offer echoed back, not a client request
+
+	tests := []struct {
+		name string
+		raw  []byte
+	}{
+		{"non-PXE DISCOVER from an ordinary client", craftRequest(msgDISCOVER, 0x0000, false, nil)},
+		{"PXE REQUEST belongs on the BINL port", craftRequest(msgREQUEST, 0x0007, true, nil)},
+		{"truncated packet", make([]byte, 100)},
+		{"corrupt magic cookie", badCookie},
+		{"BOOTREPLY rather than BOOTREQUEST", bootReply},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conn := &captureConn{}
+			s.handleDHCP(conn, tt.raw, &net.UDPAddr{IP: net.IPv4(10, 0, 0, 5), Port: PortBoot})
+			if len(conn.sent) != 0 {
+				t.Fatalf("sent %d packet(s); handleDHCP must stay silent", len(conn.sent))
+			}
+		})
+	}
+}
+
+// TestHandleDHCPBroadcastsOffer covers the phase-1 send path. The client has no
+// IP yet when it sends the DISCOVER, so the offer has to be broadcast to the
+// client port — a unicast reply would have nowhere to go.
+func TestHandleDHCPBroadcastsOffer(t *testing.T) {
+	s := testServer(t)
+	conn := &captureConn{}
+
+	s.handleDHCP(conn, craftRequest(msgDISCOVER, 0x0007, true, nil),
+		&net.UDPAddr{IP: net.IPv4zero, Port: PortBoot})
+
+	if len(conn.sent) != 1 {
+		t.Fatalf("sent %d packets, want exactly 1 offer", len(conn.sent))
+	}
+	dst, ok := conn.sent[0].dst.(*net.UDPAddr)
+	if !ok {
+		t.Fatalf("destination is %T, want *net.UDPAddr", conn.sent[0].dst)
+	}
+	if !dst.IP.Equal(net.IPv4bcast) {
+		t.Errorf("offer went to %v, want the broadcast address", dst.IP)
+	}
+	if dst.Port != PortBoot {
+		t.Errorf("offer went to port %d, want %d (client port)", dst.Port, PortBoot)
+	}
+
+	reply := conn.sent[0].payload
+	if reply[0] != opBOOTREPLY {
+		t.Errorf("op = %d, want BOOTREPLY", reply[0])
+	}
+	opts, err := parseOptions(reply[240:])
+	if err != nil {
+		t.Fatalf("parseOptions: %v", err)
+	}
+	if mt := opts[optMessageType]; len(mt) != 1 || mt[0] != msgOFFER {
+		t.Errorf("message type = %v, want OFFER", mt)
+	}
+}
+
+// TestHandleDHCPUnicastsToRelay covers the other half of the send path. A
+// non-zero giaddr means a relay agent forwarded the DISCOVER from another
+// subnet; the reply goes back to that relay on the server port, because a
+// broadcast would never cross the router.
+func TestHandleDHCPUnicastsToRelay(t *testing.T) {
+	s := testServer(t)
+	conn := &captureConn{}
+
+	raw := craftRequest(msgDISCOVER, 0x0007, true, nil)
+	relay := net.IPv4(10, 20, 30, 1)
+	copy(raw[24:28], relay.To4()) // giaddr
+
+	s.handleDHCP(conn, raw, &net.UDPAddr{IP: relay, Port: PortDHCP})
+
+	if len(conn.sent) != 1 {
+		t.Fatalf("sent %d packets, want exactly 1 offer", len(conn.sent))
+	}
+	dst, ok := conn.sent[0].dst.(*net.UDPAddr)
+	if !ok {
+		t.Fatalf("destination is %T, want *net.UDPAddr", conn.sent[0].dst)
+	}
+	if !dst.IP.Equal(relay) {
+		t.Errorf("offer went to %v, want the relay at %v", dst.IP, relay)
+	}
+	if dst.Port != PortDHCP {
+		t.Errorf("offer went to port %d, want %d (relay listens on the server port)", dst.Port, PortDHCP)
 	}
 }
 
