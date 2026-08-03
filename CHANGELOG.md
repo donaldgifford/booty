@@ -5,6 +5,10 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Bug Fixes
+
+- *(deps)* Bump x/text and Go to clear two reachable vulnerabilities
+
 ### Documentation
 
 - Add DESIGN-0001, DESIGN-0002, and IMPL-0001 release docs
