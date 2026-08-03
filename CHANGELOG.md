@@ -13,6 +13,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(httpsrv,catalog)* Close two injection paths found in the pre-release audit
 - *(catalog,tftp)* Distinguish a broken catalog, bound the OACK timeout
 - *(catalog)* Distinguish the ways a catalog root can be unusable
+- *(ci)* Gate the Starlight build on the site scaffold existing
+- *(cmd)* Reject a --url that machines cannot chain to
 
 ### Refactor
 
@@ -45,4 +47,5 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(renovate)* Add patch label so Renovate PRs pass the label check
 - Pin trufflehog to a resolvable version and stop changelog drift
+- *(release)* Publish the release-signing public key
 
