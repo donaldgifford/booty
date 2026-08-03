@@ -32,6 +32,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Testing
 
 - *(proxydhcp)* Exercise handleDHCP instead of only the parser
+- *(httpsrv)* Cover the error branches added by the audit fixes
 
 ### Miscellaneous Tasks
 
