@@ -29,6 +29,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(claude)* Record the GOTOOLCHAIN and markdown-lint gotchas
 - *(impl)* Record the pre-release audit and its open decisions
 - *(impl)* Record what Phase 4 pre-flight has already verified
+- *(impl)* Record the first measured performance data
 
 ### Testing
 
