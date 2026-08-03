@@ -1,5 +1,6 @@
 ---
 # yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
+name: Secret Scan
 on:
   push:
     branches:
@@ -7,14 +8,17 @@ on:
   pull_request:
 
 jobs:
-  test:
+  trufflehog:
+    name: Secret Scan
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      # trufflesecurity/trufflehog publishes no floating v3 tag — only exact
+      # versions — so a major-only ref fails to resolve. Renovate bumps this.
       - name: Secret Scanning
-        uses: trufflesecurity/trufflehog@v3
+        uses: trufflesecurity/trufflehog@v3.96.0
         with:
           extra_args: --results=verified,unknown

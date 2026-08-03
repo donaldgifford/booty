@@ -233,7 +233,25 @@ the next package comment:
 ### Phase 3: CI green on GitHub runners + required checks
 
 The Phase 2 PR doubles as the matrix-exercising PR (it touches Go code + docs,
-so every job triggers).
+so every job triggers). Opened as
+[PR #2](https://github.com/donaldgifford/booty/pull/2).
+
+Two CI bugs surfaced on the very first run, neither reproducible locally —
+exactly what this phase exists to catch. Both are fixed on the branch:
+
+1. **`trufflesecurity/trufflehog@v3` does not resolve.** That project publishes
+   no floating major tag, only exact versions, so the Secret Scan job failed at
+   action-resolution time on every run this repo has ever had. Pinned to
+   `v3.96.0`; Renovate will bump it. The workflow also had no top-level `name:`
+   and a job called `test`, which rendered as a check named "test" that looked
+   like the Go tests — renamed to `Secret Scan` / `trufflehog`.
+2. **The changelog drift check could never pass.** `changelog.yml` regenerates
+   with git-cliff and fails on any byte difference from the committed
+   `CHANGELOG.md`, but the committed file's header prose had been re-wrapped by
+   Prettier to a wider column than git-cliff emits — so the check failed
+   independent of content. Regenerated the file and added `.prettierignore` so
+   Prettier stops re-wrapping it. Prettier is not in CI, so this drift came from
+   a local/editor run.
 
 #### Tasks (Phase 3)
 
@@ -265,6 +283,27 @@ so every job triggers).
   force-pushes.
 - Security tab shows CodeQL + both Anchore SARIF categories; Codecov shows the
   first uploaded report.
+
+#### Blocked: the Docs workflow gates every PR on an unbuilt site
+
+`.github/workflows/docs.yml` is already on `main`, but the site it builds does
+not exist yet — that is
+[DESIGN-0002](../design/0002-starlight-docs-site-on-cloudflare-pages.md),
+explicitly out of scope here. Its `paths` filter includes `docs/**`, so it runs
+on any docs-touching PR and both jobs fail:
+
+- **Build Starlight** — there is no `site/` directory. Unfixable without
+  DESIGN-0002 Phase 1.
+- **Lint Markdown** — runs `just lint-md`, a recipe the justfile does not define
+  (DESIGN-0002 Phase 1 adds it via `docs.just`). Adding the recipe alone would
+  not turn the job green: `markdownlint-cli2 'docs/**/*.md'` currently reports
+  **49 errors** in the guide (mostly MD040 fences with no language, plus
+  MD031/MD032/MD036), which is precisely DESIGN-0002 Phase 3's cleanup task.
+
+So Phase 3's "every check green" criterion cannot be met from inside IMPL-0001.
+This needs an owner decision — see the note in Dependencies. Deliberately not
+absorbed into this phase: silently implementing another design doc's Phase 1 and
+3 here would hide the scope collision rather than resolve it.
 
 ---
 
@@ -379,7 +418,16 @@ catalog is fetched from the tag, not a working tree).
 ## Dependencies
 
 - **(Donald)** GPG key generation, Codecov enablement, and the resulting secrets
-  — blocks Phase 1 completion (labels can land first).
+  — blocks Phase 1 completion, and `GPG_PRIVATE_KEY`/`GPG_FINGERPRINT`
+  hard-block Phase 4: goreleaser's `signs` block cannot produce
+  `checksums.txt.sig` without them, so no release can be cut.
+- **(Donald) Decision needed — the Docs workflow.** `docs.yml` gates every
+  docs-touching PR on a Starlight site that DESIGN-0002 has not built yet, so
+  its two jobs fail on all PRs including this one. Options: (a) implement
+  DESIGN-0002 (it needs its own impl doc first — recommended, since the workflow
+  is already committed and expects it); (b) narrow `docs.yml`'s `paths` or gate
+  its jobs on `site/` existing, so it stops blocking unrelated work until the
+  site lands; (c) revert `docs.yml` from `main` and re-add it with DESIGN-0002.
 - GitHub-side state: Renovate app installation, Dependabot alerts,
   branch-protection permissions.
 - No new Go dependencies.
