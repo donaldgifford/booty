@@ -387,6 +387,8 @@ Fixed in this branch, each with a test that fails against the previous code:
 | `TestHandleDHCPIgnoresNonPXE` never called `handleDHCP`                  | `proxydhcp/proxydhcp_test.go` |
 | A broken catalog reported as "unknown machine", giving the wrong remedy  | `catalog/catalog.go`      |
 | TFTP `timeout` option reflected to a spoofable source unvalidated        | `tftp/tftp.go`            |
+| `DirSource{}` with no `Root` silently loaded `*.hcl` from the cwd        | `catalog/source.go`       |
+| A gosec exclusion silenced the injection finding on wrong grounds        | `.golangci.yml`           |
 
 Not acted on — these need an owner decision, and the API ones are **breaking
 after v0.1.0**, so they belong before Phase 4 rather than after:
@@ -399,11 +401,13 @@ after v0.1.0**, so they belong before Phase 4 rather than after:
   unexported; `httpsrv.New` returns no error and silently accepts an unparseable
   `BaseURL`; `tftp.New` is positional while its three peers take a struct; and
   `httpsrv.Options` vs `proxydhcp.Config` are two names for one concept.
-- **Missing sentinels.** `DirSource.Load` still cannot distinguish a missing
-  catalog directory from an empty one, and neither wraps `os.ErrNotExist`.
-  (`Match`'s dangling-profile case is fixed: `catalog.ErrUnknownProfile` is now
-  exported and all three `httpsrv` call sites branch on it. Adding a sentinel is
-  additive, so this was safe to do ahead of OQ-7.)
+- **Missing sentinels — done.** Both cases are fixed, and adding a sentinel is
+  additive so neither prejudges OQ-7. `catalog.ErrUnknownProfile` is exported
+  and all three `httpsrv` call sites branch on it. `DirSource.Load` now
+  distinguishes an unset `Root` ([ErrEmptyRoot], which previously globbed the
+  process working directory), a missing directory (wraps `os.ErrNotExist`), a
+  non-directory ([ErrRootNotDirectory]), and a directory holding no catalog
+  ([ErrNoCatalogFiles]).
 - **Security posture.** TFTP is a measured 121x UDP amplifier bound to
   `0.0.0.0:69` by default, and each unauthenticated datagram holds a socket for
   the full 20s retry budget with no concurrency bound; `proxydhcp` honours the
@@ -413,8 +417,20 @@ after v0.1.0**, so they belong before Phase 4 rather than after:
   guards are lexical, so a symlink in the boot dir escapes it — accepted
   explicitly in `docs/go-ipxe/03-tftp-from-scratch.md`, but `tftp.go`'s comment
   still claims the path is "guaranteed" to sit under `bootDir`, which is false.
-- **Tooling.** `gosec` is not enabled in `.golangci.yml` and not in CI, yet it
-  independently found two of the three confirmed defect classes.
+- **Tooling — correction.** An earlier revision of this section said `gosec` was
+  not enabled. That was wrong, and it is worth recording how: the security pass
+  reported it, and it was written down here without being checked. `gosec` has
+  been enabled in `.golangci.yml` all along and runs in CI through
+  golangci-lint. What actually happened is more interesting — `gosec` **did**
+  flag the template-injection sinks (G705), and an exclusion suppressed them on
+  the grounds that "httpsrv responses are … never browser HTML, so the XSS taint
+  analysis does not apply." That is true and beside the point: the risk was
+  never XSS, it was injection into the rendered YAML/TOML, which is exactly the
+  defect fixed above. A correct-sounding rationale addressing the wrong threat
+  silenced a true positive for as long as it stood. The exclusion comments for
+  G705 and G304 now state what is actually being accepted and what invalidates
+  it. A dead `G104` exclusion scoped to `cmd/(compare|diff).go` — files that
+  have never existed in this repo — was removed as template residue.
 
 #### OQ-7: How much of the API reshaping lands before v0.1.0
 

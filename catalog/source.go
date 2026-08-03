@@ -2,7 +2,9 @@ package catalog
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -23,6 +25,23 @@ type Source interface {
 	String() string
 }
 
+// Errors [DirSource.Load] reports for a catalog root it cannot use. They are
+// distinct because a consumer may reasonably treat them differently — an
+// unprovisioned path can be benign where an empty one is fatal. A missing
+// directory wraps [os.ErrNotExist], so errors.Is reaches that too.
+var (
+	// ErrEmptyRoot means DirSource.Root was not set. It is refused rather than
+	// defaulted: an empty Root would otherwise glob the process working
+	// directory.
+	ErrEmptyRoot = errors.New("catalog root is empty")
+
+	// ErrRootNotDirectory means Root exists but is not a directory.
+	ErrRootNotDirectory = errors.New("catalog root is not a directory")
+
+	// ErrNoCatalogFiles means Root is a directory containing no .hcl files.
+	ErrNoCatalogFiles = errors.New("no .hcl files found")
+)
+
 // DirSource loads every *.hcl file in Root, merging them into one catalog.
 // Overrides supply values for `variable` blocks by name (e.g. from a flag),
 // falling back to each variable's default.
@@ -40,12 +59,29 @@ func (s DirSource) Load(ctx context.Context) (*Catalog, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	// An empty Root would make filepath.Join below produce the bare glob
+	// "*.hcl", silently loading the catalog from whatever the process working
+	// directory happens to be. Refuse rather than guess.
+	if s.Root == "" {
+		return nil, ErrEmptyRoot
+	}
+	// Stat before globbing so "the directory is not there" is distinguishable
+	// from "the directory is there and holds no catalog". A platform consumer
+	// may treat an unprovisioned path as benign and an empty one as fatal, and
+	// Glob alone reports both as zero matches.
+	info, err := os.Stat(s.Root)
+	if err != nil {
+		return nil, fmt.Errorf("catalog root %s: %w", s.Root, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("catalog root %s: %w", s.Root, ErrRootNotDirectory)
+	}
 	paths, err := filepath.Glob(filepath.Join(s.Root, "*.hcl"))
 	if err != nil {
 		return nil, fmt.Errorf("scanning %s: %w", s.Root, err)
 	}
 	if len(paths) == 0 {
-		return nil, fmt.Errorf("no .hcl files found in %s", s.Root)
+		return nil, fmt.Errorf("in %s: %w", s.Root, ErrNoCatalogFiles)
 	}
 	sort.Strings(paths)
 

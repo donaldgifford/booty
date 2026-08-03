@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -189,4 +190,51 @@ func TestLoadNoFiles(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "no .hcl files") {
 		t.Fatalf("want no-files error, got %v", err)
 	}
+}
+
+// TestLoadRootErrors pins the three ways a catalog root can be unusable as
+// distinct, branchable conditions. Before this they were one formatted string,
+// so a consumer could not tell an unprovisioned path (possibly benign) from an
+// empty directory (a real misconfiguration), and an empty Root silently loaded
+// whatever .hcl files happened to sit in the process working directory.
+func TestLoadRootErrors(t *testing.T) {
+	ctx := t.Context()
+
+	t.Run("empty root is refused, not defaulted to cwd", func(t *testing.T) {
+		_, err := DirSource{}.Load(ctx)
+		if !errors.Is(err, ErrEmptyRoot) {
+			t.Fatalf("err = %v, want ErrEmptyRoot", err)
+		}
+	})
+
+	t.Run("missing directory wraps os.ErrNotExist", func(t *testing.T) {
+		_, err := DirSource{Root: filepath.Join(t.TempDir(), "absent")}.Load(ctx)
+		if !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("err = %v, want it to wrap os.ErrNotExist", err)
+		}
+		if errors.Is(err, ErrNoCatalogFiles) {
+			t.Error("a missing directory must not report as ErrNoCatalogFiles")
+		}
+	})
+
+	t.Run("empty directory reports ErrNoCatalogFiles", func(t *testing.T) {
+		_, err := DirSource{Root: t.TempDir()}.Load(ctx)
+		if !errors.Is(err, ErrNoCatalogFiles) {
+			t.Fatalf("err = %v, want ErrNoCatalogFiles", err)
+		}
+		if errors.Is(err, os.ErrNotExist) {
+			t.Error("an existing empty directory must not report as os.ErrNotExist")
+		}
+	})
+
+	t.Run("a file where a directory belongs", func(t *testing.T) {
+		p := filepath.Join(t.TempDir(), "catalog.hcl")
+		if err := os.WriteFile(p, []byte("// not a directory\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := (DirSource{Root: p}).Load(ctx)
+		if !errors.Is(err, ErrRootNotDirectory) {
+			t.Fatalf("err = %v, want ErrRootNotDirectory", err)
+		}
+	})
 }
