@@ -236,8 +236,8 @@ The Phase 2 PR doubles as the matrix-exercising PR (it touches Go code + docs,
 so every job triggers). Opened as
 [PR #2](https://github.com/donaldgifford/booty/pull/2).
 
-Two CI bugs surfaced on the very first run, neither reproducible locally —
-exactly what this phase exists to catch. Both are fixed on the branch:
+Three classes of bug surfaced on the very first run, none reproducible locally —
+exactly what this phase exists to catch. All are fixed on the branch:
 
 1. **`trufflesecurity/trufflehog@v3` does not resolve.** That project publishes
    no floating major tag, only exact versions, so the Secret Scan job failed at
@@ -252,26 +252,54 @@ exactly what this phase exists to catch. Both are fixed on the branch:
    independent of content. Regenerated the file and added `.prettierignore` so
    Prettier stops re-wrapping it. Prettier is not in CI, so this drift came from
    a local/editor run.
+3. **Two reachable CVEs that would have shipped in v0.1.0.** `govulncheck` on
+   the runner flagged **GO-2026-5970**, an infinite loop on invalid input in
+   `golang.org/x/text`, reachable from `catalog.decodeCatalog` and
+   `catalog.evalLocals` through HCL expression evaluation — a malformed catalog
+   file could hang the loader. Fixed in x/text v0.39.0. Bumping it surfaced
+   **GO-2026-5856**, an Encrypted Client Hello privacy leak in `crypto/tls`
+   reachable via `httpsrv.ListenAndServe`, fixed in go1.26.5; `go.mod`,
+   `mise.toml`, and the Dockerfile builder were bumped together per CLAUDE.md.
+   `govulncheck` is now clean.
+
+Operational note: regenerate the changelog as the **last** commit before
+pushing, with a `chore(changelog):` subject — `cliff.toml` skips those from the
+body (`^chore.*[Cc]hangelog`), so the commit does not invalidate the file it
+just wrote.
 
 #### Tasks (Phase 3)
 
-- [ ] Push the Phase 2 PR (labeled `dont-release`) and drive every job green:
+- [x] Push the Phase 2 PR (labeled `dont-release`) and drive every job green:
       golangci-lint, test-coverage + coverage-gate, e2e protocol tier,
       govulncheck, Trivy, CodeQL, goreleaser snapshot + SBOM locate/scan + SARIF
-      upload, docker bake `booty-ci`.
-- [ ] Verify the SBOM-locate glob (`dist/booty_*_linux_amd64.tar.gz.spdx.json`)
+      upload, docker bake `booty-ci`. **All green** except the two Docs jobs,
+      which are blocked on DESIGN-0002 (see below). Getting there took three
+      fixes: trufflehog's unresolvable tag, the changelog drift check, and two
+      reachable CVEs.
+- [x] Verify the SBOM-locate glob (`dist/booty_*_linux_amd64.tar.gz.spdx.json`)
       resolves on the runner — the snapshot version string differs from local.
-- [ ] Verify the e2e protocol tier's UDP loopback sockets behave on
-      `ubuntu-latest`.
-- [ ] Verify `ghcr.io/donaldgifford/booty:dev-ci` exists after the PR run and
+      Confirmed: syft emitted `booty_v0.0.0-dev_linux_amd64.tar.gz.spdx.json`
+      and the glob matched it.
+- [x] Verify the e2e protocol tier's UDP loopback sockets behave on
+      `ubuntu-latest` — `TestE2EProtocolReachability` passes; the QEMU tier
+      skips as designed.
+- [x] Verify `ghcr.io/donaldgifford/booty:dev-ci` exists after the PR run and
       both Anchore SARIF categories appear in the Security tab alongside CodeQL.
-- [ ] Verify the Codecov upload succeeds with the new token and the PR gets a
-      coverage comment.
-- [ ] Merge; verify post-merge jobs on `main`: the `ci` bake validation and the
-      changelog workflow run clean.
-- [ ] Create a repository ruleset for `main` (OQ-3) requiring the proven checks
-      — include `PR Label Check`, exclude post-merge-only jobs — plus
-      PR-before-merge and no force-pushes.
+      Confirmed: the manifest pushed, and code-scanning reports four analyses —
+      `CodeQL /language:go`, `govulncheck`, `Grype anchore-archive-sbom`, and
+      `Grype anchore-dev-image`.
+- [ ] **Blocked (Donald).** Verify the Codecov upload succeeds with the new
+      token and the PR gets a coverage comment. The step runs today but no-ops:
+      `CODECOV_TOKEN` is unset and the action has `CC_FAIL_ON_ERROR: false`, so
+      it cannot fail the build or report.
+- [ ] **(Donald)** Merge; verify post-merge jobs on `main`: the `ci` bake
+      validation and the changelog workflow run clean. Held for an owner
+      decision — the two Docs jobs are red, so merging means either accepting
+      them or resolving the DESIGN-0002 collision first.
+- [ ] **(Donald)** Create a repository ruleset for `main` (OQ-3) requiring the
+      proven checks — include `PR Label Check`, exclude post-merge-only jobs and
+      the two Docs jobs until DESIGN-0002 lands — plus PR-before-merge and no
+      force-pushes.
 - [ ] Confirm a follow-up trivial PR cannot merge with a failing required check
       (flip one intentionally or rely on the label check pre-label).
 
@@ -402,6 +430,9 @@ catalog is fetched from the tag, not a working tree).
 | `catalog/catalog.go` (+ 4 lead files) | Modify | Package comment removed                            |
 | `docs/booty-release.pub.asc`          | Create | Release-signing public key                         |
 | `renovate.json5`                      | Modify | Add `addLabels: ["patch"]` (OQ-1)                  |
+| `.github/workflows/trufflehog.yml`    | Modify | Pin to a resolvable tag; name the workflow/job     |
+| `.prettierignore`                     | Create | Keep Prettier off git-cliff's `CHANGELOG.md`       |
+| `go.mod` / `mise.toml` / `Dockerfile` | Modify | x/text v0.39.0; Go 1.26.5 (GO-2026-5970/5856)      |
 | `README.md`                           | Modify | Badges; key fingerprint; validation-driven fixes   |
 | `docs/go-ipxe/*`                      | Modify | Only if prose references the moved comments        |
 | `CHANGELOG.md`                        | —      | Regenerated by workflow, not hand-edited           |
