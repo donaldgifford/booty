@@ -133,9 +133,12 @@ workflow fails every PR until they exist, so nothing else can merge.
       `addLabels` is mergeable, so Renovate PRs carry `dependencies` + `patch`
       (plus `security` on vulnerability alerts), which is still exactly one
       semver label for the check. Validated with `renovate-config-validator`.
-- [ ] Open the plumbing-test PR — the pending docs (DESIGN-0001/0002 + this doc)
+- [x] Open the plumbing-test PR — the pending docs (DESIGN-0001/0002 + this doc)
       — labeled `dont-release`; confirm `PR Label Check` passes, the labeler
-      applies `docs`/`documentation`, and every CI job triggers.
+      applies `docs`/`documentation`, and every CI job triggers. Opened as
+      [PR #2](https://github.com/donaldgifford/booty/pull/2): the label check
+      passes, and the labeler applied `documentation`, `docs`, `ci`, `repo`, and
+      `dependencies` alongside `dont-release`. Every workflow triggered.
 
 #### Success Criteria (Phase 1)
 
