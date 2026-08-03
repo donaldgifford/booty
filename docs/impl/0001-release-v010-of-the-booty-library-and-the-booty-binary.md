@@ -425,6 +425,20 @@ after v0.1.0**, so they belong before Phase 4 rather than after:
   guards are lexical, so a symlink in the boot dir escapes it — accepted
   explicitly in `docs/go-ipxe/03-tftp-from-scratch.md`, but `tftp.go`'s comment
   still claims the path is "guaranteed" to sit under `bootDir`, which is false.
+- **Performance — first measured data.** The repo had no benchmarks at all, so
+  nothing here was ever measured. A profile of the `/ipxe` boot path shows cost
+  growing linearly with catalog size — 22 µs and 158 allocations against 8
+  groups, 209 µs and 1,732 allocations against 128 — and
+  `Match` → `matchSelector` → `NormalizeMAC` accounts for **19.9% of all bytes
+  allocated** in that path. The cause is that `matchSelector` re-normalizes each
+  group's selector MAC on every request, so a 128-group catalog repeats that
+  work 128 times per booting machine. Two fixes, both cheap: hoist the
+  `strings.NewReplacer` out of `NormalizeMAC` (it compiles a trie per call), and
+  normalize selector MACs once at load instead of per match. The second is a
+  visible change to `Catalog.Groups` data, so it is deliberately left for OQ-7
+  rather than slipped in. Nothing else is hot: `parsePacket` is 219 ns / 5
+  allocs and `handleDHCP` 1.9 µs / 20 allocs, which no realistic PXE burst will
+  notice.
 - **Tooling — correction.** An earlier revision of this section said `gosec` was
   not enabled. That was wrong, and it is worth recording how: the security pass
   reported it, and it was written down here without being checked. `gosec` has
