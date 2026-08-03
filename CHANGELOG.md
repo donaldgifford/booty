@@ -12,6 +12,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(tftp,proxydhcp)* Honour ctx cancellation on shutdown
 - *(httpsrv,catalog)* Close two injection paths found in the pre-release audit
 - *(catalog,tftp)* Distinguish a broken catalog, bound the OACK timeout
+- *(catalog)* Distinguish the ways a catalog root can be unusable
 
 ### Documentation
 
