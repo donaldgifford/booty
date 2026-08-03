@@ -28,6 +28,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Make docs/ markdownlint-clean and add the lint-md recipe
 - *(claude)* Record the GOTOOLCHAIN and markdown-lint gotchas
 - *(impl)* Record the pre-release audit and its open decisions
+- *(impl)* Record what Phase 4 pre-flight has already verified
 
 ### Testing
 
