@@ -31,6 +31,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* Record what Phase 4 pre-flight has already verified
 - *(impl)* Record the first measured performance data
 
+### Performance
+
+- *(catalog)* Stop rebuilding the MAC replacer on every comparison
+
 ### Testing
 
 - *(proxydhcp)* Exercise handleDHCP instead of only the parser
