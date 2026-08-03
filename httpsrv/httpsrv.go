@@ -159,8 +159,14 @@ func (s *Server) handleIPXE(w http.ResponseWriter, r *http.Request) {
 
 	res, err := s.catalog.Match(id)
 	if err != nil {
-		// No match and no catch-all group. Serve a shell script, never a non-200:
-		// iPXE handles non-200 / non-#!ipxe responses poorly on some firmware.
+		// Always a shell script, never a non-200: iPXE handles non-200 /
+		// non-#!ipxe responses poorly on some firmware. But the two failures
+		// need opposite remedies, so they must not share a message.
+		if errors.Is(err, catalog.ErrUnknownProfile) {
+			s.logger.Error("catalog is broken", "mac", id.MAC, "err", err)
+			writeIPXE(w, errorScript(err.Error()))
+			return
+		}
 		s.logger.Warn("no catalog match", "mac", id.MAC, "err", err)
 		writeIPXE(w, noMatchScript(id))
 		return
@@ -219,6 +225,13 @@ func (s *Server) handleMachineConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := s.catalog.Match(id)
 	if err != nil {
+		if errors.Is(err, catalog.ErrUnknownProfile) {
+			// The machine is fine; the catalog is not. 500, not 404, so the
+			// operator sees a server fault rather than an unknown machine.
+			s.logger.Error("machine-config: catalog is broken", "mac", id.MAC, "err", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		s.logger.Warn("machine-config: no match", "mac", id.MAC, "err", err)
 		http.Error(w, "no machine config for this machine", http.StatusNotFound)
 		return
@@ -404,6 +417,11 @@ func (s *Server) cloudInitResolve(w http.ResponseWriter, r *http.Request) (catal
 	id := catalog.Identity{IP: clientIP(r)}
 	res, err := s.catalog.Match(id)
 	if err != nil {
+		if errors.Is(err, catalog.ErrUnknownProfile) {
+			s.logger.Error("cloud-init: catalog is broken", "ip", id.IP, "err", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return id, nil, false
+		}
 		s.logger.Warn("cloud-init: no match", "ip", id.IP, "err", err)
 		http.Error(w, "no data for this instance", http.StatusNotFound)
 		return id, nil, false

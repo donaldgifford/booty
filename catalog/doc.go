@@ -25,7 +25,13 @@
 //
 //	res, err := cat.Match(catalog.Identity{MAC: "de:ad:be:ef:00:01"})
 //	if err != nil {
-//		// errors.Is(err, catalog.ErrNoMatch) when no group selects the machine.
+//		// Two distinct failures, with opposite remedies:
+//		//   errors.Is(err, catalog.ErrNoMatch)       — no group selects this
+//		//                                              machine; add one.
+//		//   errors.Is(err, catalog.ErrUnknownProfile) — a group does select it
+//		//                                              but names a profile the
+//		//                                              catalog never defines;
+//		//                                              fix the catalog.
 //		return err
 //	}
 //	fmt.Println(res.Group, res.Vars)

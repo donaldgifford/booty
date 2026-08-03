@@ -356,8 +356,15 @@ func buildOACK(opts map[string]string, negotiatedBlockSize int, fileSize int64) 
 	if _, ok := opts["tsize"]; ok {
 		writeOpt("tsize", strconv.FormatInt(fileSize, 10))
 	}
+	// RFC 2349 bounds timeout at 1-255 seconds. Echoing the client's string back
+	// verbatim would reflect arbitrary bytes to a spoofable source address, so
+	// validate and re-emit the parsed number. An out-of-range or non-numeric
+	// value is simply not acknowledged, which RFC 2347 defines as "option
+	// refused" — the client falls back to its own default.
 	if v, ok := opts["timeout"]; ok {
-		writeOpt("timeout", v)
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 255 {
+			writeOpt("timeout", strconv.Itoa(n))
+		}
 	}
 	return []byte(b.String())
 }

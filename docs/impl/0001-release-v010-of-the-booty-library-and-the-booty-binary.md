@@ -385,6 +385,8 @@ Fixed in this branch, each with a test that fails against the previous code:
 | Identity strings reached templates unescaped — newline injection         | `httpsrv/httpsrv.go`      |
 | HCL diagnostics stringified with `%s`, breaking `errors.As`              | `catalog/source.go`       |
 | `TestHandleDHCPIgnoresNonPXE` never called `handleDHCP`                  | `proxydhcp/proxydhcp_test.go` |
+| A broken catalog reported as "unknown machine", giving the wrong remedy  | `catalog/catalog.go`      |
+| TFTP `timeout` option reflected to a spoofable source unvalidated        | `tftp/tftp.go`            |
 
 Not acted on — these need an owner decision, and the API ones are **breaking
 after v0.1.0**, so they belong before Phase 4 rather than after:
@@ -397,17 +399,17 @@ after v0.1.0**, so they belong before Phase 4 rather than after:
   unexported; `httpsrv.New` returns no error and silently accepts an unparseable
   `BaseURL`; `tftp.New` is positional while its three peers take a struct; and
   `httpsrv.Options` vs `proxydhcp.Config` are two names for one concept.
-- **Missing sentinels.** `Match`'s "group references unknown profile" error has
-  no sentinel, so `httpsrv` cannot distinguish a broken catalog from an
-  unmatched machine and tells the operator to add a group — the wrong advice.
-  `DirSource.Load` cannot distinguish a missing directory from an empty one.
+- **Missing sentinels.** `DirSource.Load` still cannot distinguish a missing
+  catalog directory from an empty one, and neither wraps `os.ErrNotExist`.
+  (`Match`'s dangling-profile case is fixed: `catalog.ErrUnknownProfile` is now
+  exported and all three `httpsrv` call sites branch on it. Adding a sentinel is
+  additive, so this was safe to do ahead of OQ-7.)
 - **Security posture.** TFTP is a measured 121x UDP amplifier bound to
   `0.0.0.0:69` by default, and each unauthenticated datagram holds a socket for
   the full 20s retry budget with no concurrency bound; `proxydhcp` honours the
   unauthenticated `giaddr` field, letting any host on the segment aim booty's
   reply at an arbitrary off-subnet IP; `--proxmox-token` is passed as a command
-  line argument and is therefore visible in `ps`; the TFTP `timeout` option is
-  echoed into the OACK unvalidated (RFC 2349 requires 1–255); and both path
+  line argument and is therefore visible in `ps`; and both path
   guards are lexical, so a symlink in the boot dir escapes it — accepted
   explicitly in `docs/go-ipxe/03-tftp-from-scratch.md`, but `tftp.go`'s comment
   still claims the path is "guaranteed" to sit under `bootDir`, which is false.

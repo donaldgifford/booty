@@ -100,6 +100,13 @@ type Resolution struct {
 // no catch-all group.
 var ErrNoMatch = errors.New("no matching group")
 
+// ErrUnknownProfile is returned by Match when a group did select the identity
+// but names a profile the catalog does not define. It is deliberately distinct
+// from [ErrNoMatch]: the machine is configured, the catalog is broken, and the
+// two call for opposite remedies. Callers should branch with errors.Is rather
+// than treating every Match failure as "unknown machine".
+var ErrUnknownProfile = errors.New("group references unknown profile")
+
 // Match finds the most specific group that selects id and resolves it to a
 // profile. Specificity is the number of selector terms that had to match; ties
 // break deterministically by group name so the same input always yields the same
@@ -122,7 +129,7 @@ func (c *Catalog) Match(id Identity) (*Resolution, error) {
 	}
 	prof, ok := c.Profiles[best.Profile]
 	if !ok {
-		return nil, fmt.Errorf("group %q references unknown profile %q", best.Name, best.Profile)
+		return nil, fmt.Errorf("group %q names profile %q: %w", best.Name, best.Profile, ErrUnknownProfile)
 	}
 
 	vars := make(map[string]string, len(prof.Vars)+len(best.Vars))

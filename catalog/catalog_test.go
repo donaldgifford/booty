@@ -171,3 +171,37 @@ func TestValidate(t *testing.T) {
 		}
 	})
 }
+
+// TestMatchUnknownProfileSentinel pins the distinction between "this machine is
+// not in the catalog" and "the catalog is broken". They call for opposite
+// remedies, and before ErrUnknownProfile existed a caller could only tell them
+// apart by matching on the error string — so httpsrv told the operator to add a
+// group for a machine whose group already existed.
+func TestMatchUnknownProfileSentinel(t *testing.T) {
+	c := &Catalog{
+		Profiles: map[string]Profile{},
+		Groups: []Group{
+			{Name: "worker-01", Profile: "does-not-exist", Selector: map[string]string{"mac": "d0:50:99:b3:4c:50"}},
+		},
+	}
+
+	_, err := c.Match(Identity{MAC: "d0:50:99:b3:4c:50"})
+	if err == nil {
+		t.Fatal("want an error for a group naming a missing profile")
+	}
+	if !errors.Is(err, ErrUnknownProfile) {
+		t.Errorf("errors.Is(err, ErrUnknownProfile) = false; err = %v", err)
+	}
+	if errors.Is(err, ErrNoMatch) {
+		t.Error("a dangling profile reference must not report as ErrNoMatch")
+	}
+
+	// A machine no group selects still reports ErrNoMatch, not ErrUnknownProfile.
+	_, err = c.Match(Identity{MAC: "aa:bb:cc:dd:ee:ff"})
+	if !errors.Is(err, ErrNoMatch) {
+		t.Errorf("unselected machine: errors.Is(err, ErrNoMatch) = false; err = %v", err)
+	}
+	if errors.Is(err, ErrUnknownProfile) {
+		t.Error("unselected machine must not report as ErrUnknownProfile")
+	}
+}

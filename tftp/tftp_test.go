@@ -462,3 +462,41 @@ func hasPrefix(s, prefix string) bool {
 func asTFTP(err error, target **tftpError) bool {
 	return errors.As(err, target)
 }
+
+// TestOACKTimeoutValidated pins RFC 2349's 1-255 bound on the timeout option.
+// The value used to be echoed back verbatim, which reflected arbitrary bytes to
+// a source address TFTP cannot verify. Out-of-range values are left out of the
+// OACK entirely, which RFC 2347 defines as refusing the option.
+func TestOACKTimeoutValidated(t *testing.T) {
+	tests := []struct {
+		name    string
+		request string
+		want    string // "" means the option must be absent
+	}{
+		{"in range", "5", "5"},
+		{"lower bound", "1", "1"},
+		{"upper bound", "255", "255"},
+		{"zero is out of range", "0", ""},
+		{"above the bound", "256", ""},
+		{"negative", "-1", ""},
+		{"not a number", "abc", ""},
+		{"injected bytes", "\x01\x02INJECT-9999999999", ""},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oack := buildOACK(map[string]string{"timeout": tt.request}, defaultBlockSize, 1024)
+			opts := parseOACKOpts(oack[2:])
+			got, present := opts["timeout"]
+			if tt.want == "" {
+				if present {
+					t.Errorf("timeout=%q was acknowledged as %q; want the option refused", tt.request, got)
+				}
+				return
+			}
+			if !present || got != tt.want {
+				t.Errorf("timeout=%q acknowledged as %q (present=%v), want %q", tt.request, got, present, tt.want)
+			}
+		})
+	}
+}
