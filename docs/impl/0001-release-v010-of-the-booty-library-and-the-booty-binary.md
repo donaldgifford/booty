@@ -448,6 +448,13 @@ after v0.1.0**, so they belong before Phase 4 rather than after:
   _slower_ than serial (239 µs vs 216 µs), because every core producing 1.7 MB
   of garbage kept the process in continuous GC. It scales properly now.
 
+  This cost was invisible for the entire life of the code — nothing failed, and
+  benchmarks only help if somebody runs and compares them. `catalog/alloc_test.go`
+  now makes the class of regression loud: `testing.AllocsPerRun` budgets on
+  `Match` and `NormalizeMAC` that run in the ordinary suite, set well above what
+  the code does today and well below what it did per-call. Verified by reverting
+  the hoist — both fail with the reason named.
+
   Everything else was checked and is right for this workload, so no release
   time should go into it. TFTP per-block allocation was implemented and A/B'd:
   it removes 95% of the garbage and buys 0–5% throughput, because stop-and-wait
