@@ -87,7 +87,8 @@ type Config struct {
 	Logger       *slog.Logger
 }
 
-// Server answers PXE proxyDHCP (port 67) and BINL (port 4011). Construct with New.
+// Server answers PXE proxyDHCP (port 67) and BINL (port 4011). Construct with
+// New: a zero Server is not usable and panics on a nil logger.
 type Server struct {
 	serverIP     net.IP
 	bootFileEFI  string

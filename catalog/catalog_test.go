@@ -205,3 +205,45 @@ func TestMatchUnknownProfileSentinel(t *testing.T) {
 		t.Error("unselected machine must not report as ErrUnknownProfile")
 	}
 }
+
+// TestMatchReportsSpecificity pins the term count Match already computes onto
+// the result. Without it a caller resolving one machine several ways — a
+// multi-NIC host tried under each of its MACs — had to rescan Catalog.Groups by
+// name to recover the number, which is what httpsrv did.
+func TestMatchReportsSpecificity(t *testing.T) {
+	c := &Catalog{
+		Profiles: map[string]Profile{"p": {Name: "p"}},
+		Groups: []Group{
+			{Name: "catch-all", Profile: "p"},
+			{Name: "by-mac", Profile: "p", Selector: map[string]string{"mac": "d0:50:99:b3:4c:50"}},
+			{Name: "by-mac-and-arch", Profile: "p", Selector: map[string]string{
+				"mac": "d0:50:99:b3:4c:51", "arch": "x86_64",
+			}},
+		},
+	}
+
+	tests := []struct {
+		name      string
+		id        Identity
+		wantGroup string
+		wantSpec  int
+	}{
+		{"catch-all matches with no terms", Identity{MAC: "aa:bb:cc:dd:ee:ff"}, "catch-all", 0},
+		{"one selector term", Identity{MAC: "d0:50:99:b3:4c:50"}, "by-mac", 1},
+		{"two selector terms", Identity{MAC: "d0:50:99:b3:4c:51", Arch: "x86_64"}, "by-mac-and-arch", 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := c.Match(tt.id)
+			if err != nil {
+				t.Fatalf("Match: %v", err)
+			}
+			if res.Group != tt.wantGroup {
+				t.Fatalf("group = %q, want %q", res.Group, tt.wantGroup)
+			}
+			if res.Specificity != tt.wantSpec {
+				t.Errorf("Specificity = %d, want %d", res.Specificity, tt.wantSpec)
+			}
+		})
+	}
+}

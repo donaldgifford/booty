@@ -37,7 +37,8 @@ type Options struct {
 	ProxmoxAuthToken string
 }
 
-// Server owns the HTTP listener and its dependencies. Construct with New.
+// Server owns the HTTP listener and its dependencies. Construct with New: a
+// zero Server is not usable and its handlers panic on a nil logger.
 type Server struct {
 	logger       *slog.Logger
 	catalog      *catalog.Catalog
@@ -344,14 +345,6 @@ func (s *Server) handleProxmoxAnswer(w http.ResponseWriter, r *http.Request) {
 // resolution whose matched group has the most selector terms. This keeps a
 // multi-NIC host matching its pinned group even when a catch-all exists.
 func (s *Server) mostSpecificMatch(base catalog.Identity, macs []string) (catalog.Identity, *catalog.Resolution) {
-	terms := func(group string) int {
-		for _, g := range s.catalog.Groups {
-			if g.Name == group {
-				return len(g.Selector)
-			}
-		}
-		return 0
-	}
 	var bestID catalog.Identity
 	var best *catalog.Resolution
 	bestTerms := -1
@@ -362,8 +355,8 @@ func (s *Server) mostSpecificMatch(base catalog.Identity, macs []string) (catalo
 		if err != nil {
 			continue
 		}
-		if n := terms(res.Group); n > bestTerms {
-			bestID, best, bestTerms = id, res, n
+		if res.Specificity > bestTerms {
+			bestID, best, bestTerms = id, res, res.Specificity
 		}
 	}
 	return bestID, best

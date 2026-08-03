@@ -389,10 +389,18 @@ Fixed in this branch, each with a test that fails against the previous code:
 | TFTP `timeout` option reflected to a spoofable source unvalidated        | `tftp/tftp.go`            |
 | `DirSource{}` with no `Root` silently loaded `*.hcl` from the cwd        | `catalog/source.go`       |
 | A gosec exclusion silenced the injection finding on wrong grounds        | `.golangci.yml`           |
+| `httpsrv` rescanned `Catalog.Groups` to recover a number `Match` had     | `catalog/catalog.go`      |
 
 Not acted on — these need an owner decision, and the API ones are **breaking
 after v0.1.0**, so they belong before Phase 4 rather than after:
 
+- **Design smell — done.** `Resolution` now carries `Specificity`, the selector
+  term count `Match` always computed and discarded. `httpsrv.mostSpecificMatch`
+  was recovering it by rescanning `Catalog.Groups` by name on every candidate
+  MAC — the library's own reference consumer working around its own API, and
+  one of the reasons `Catalog.Groups` has to stay exported. Additive, so it does
+  not prejudge OQ-7. All four server types now document that their zero value is
+  unusable; previously only `tftp` did.
 - **API shape.** `proxydhcp.Serve(ctx, conn, binl bool)` is a naked-bool seam
   (`ServeDHCP`/`ServeBINL` would read better); `catalog.Source` is an interface
   with one implementation and no in-repo use, which CLAUDE.md's

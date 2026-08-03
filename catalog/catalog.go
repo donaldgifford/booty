@@ -94,6 +94,11 @@ type Resolution struct {
 	Group   string
 	Profile Profile
 	Vars    map[string]string
+	// Specificity is how many selector terms the winning group had to match —
+	// 0 for a catch-all. A caller resolving one machine several ways (a
+	// multi-NIC host tried under each of its MACs, say) needs this to pick the
+	// most specific result, and only Match is in a position to report it.
+	Specificity int
 }
 
 // ErrNoMatch is returned by Match when no group selects the identity and there is
@@ -135,7 +140,7 @@ func (c *Catalog) Match(id Identity) (*Resolution, error) {
 	vars := make(map[string]string, len(prof.Vars)+len(best.Vars))
 	maps.Copy(vars, prof.Vars)
 	maps.Copy(vars, best.Vars) // group overrides profile
-	return &Resolution{Group: best.Name, Profile: prof, Vars: vars}, nil
+	return &Resolution{Group: best.Name, Profile: prof, Vars: vars, Specificity: bestScore}, nil
 }
 
 // matchSelector reports whether every selector term matches id, and if so the
