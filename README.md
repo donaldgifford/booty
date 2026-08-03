@@ -112,6 +112,28 @@ amd64+arm64) archives with SBOMs and signed checksums land on the release page.
 Version metadata (`version`, `commit`, `date`) is embedded via `-ldflags`;
 `booty version` prints it.
 
+### Verifying a release
+
+`checksums.txt` is signed with the release key, whose public half is committed
+as [`docs/booty-release.pub.asc`](docs/booty-release.pub.asc):
+
+```text
+C47D 59D8 6FC2 4BAE C5BB  3271 2E2C EA0B C2BD 8D59
+```
+
+Verify the signature, then the archive against the checksum it covers — the
+signature only attests to `checksums.txt`, so skipping the second step verifies
+nothing about what you downloaded:
+
+```sh
+gpg --import docs/booty-release.pub.asc
+gpg --verify checksums.txt.sig checksums.txt
+sha256sum --ignore-missing -c checksums.txt
+```
+
+Importing the key from this repo means you are trusting the repo. To do better,
+confirm the fingerprint above through a channel that isn't GitHub.
+
 ## Container
 
 ```sh

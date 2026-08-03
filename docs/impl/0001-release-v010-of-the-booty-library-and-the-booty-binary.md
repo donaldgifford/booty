@@ -113,12 +113,18 @@ workflow fails every PR until they exist, so nothing else can merge.
       `dependencies`, `documentation`, `ci`, `repo`, `feature`, `fix`, `chore`,
       `docs`, `security`) — `./scripts/labels.sh --dry-run` reports 14/14
       present, 0 to create.
-- [ ] **(Donald)** Generate the dedicated release-signing GPG key (suggested:
-      `gpg --quick-generate-key "booty release <dgifford06@gmail.com>" ed25519 sign 2y`),
-      then set the secrets: `gh secret set GPG_PRIVATE_KEY` (armored
-      `--export-secret-keys`) and `gh secret set GPG_FINGERPRINT`.
-- [ ] **(Donald)** Export the public key to `docs/booty-release.pub.asc`, commit
-      it, and note the fingerprint in the README Release section.
+- [x] **(Donald)** Generate the dedicated release-signing GPG key, then set the
+      secrets: `gh secret set GPG_PRIVATE_KEY` (armored `--export-secret-keys`)
+      and `gh secret set GPG_FINGERPRINT`. Done — `gh secret list` shows both.
+      The key used is the existing RSA-4096 "Donald Gifford (Github Package
+      Signing)" key rather than a freshly generated ed25519 one; the suggestion
+      above was only a suggestion, and reusing an established signing key means
+      anyone who already trusts it needs no new trust decision.
+- [x] **(Donald)** Export the public key to `docs/booty-release.pub.asc`, commit
+      it, and note the fingerprint in the README Release section. The README now
+      carries the fingerprint plus the two-step verify (signature over
+      `checksums.txt`, then archive against checksum) — verifying only the
+      signature attests to nothing about the archive you downloaded.
 - [ ] **(Donald)** Enable the repo on Codecov and `gh secret set CODECOV_TOKEN`.
 - [x] Confirm Dependabot alerts are enabled (the `dependabot-severity-label`
       workflow depends on them) —
