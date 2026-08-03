@@ -14,6 +14,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(catalog,tftp)* Distinguish a broken catalog, bound the OACK timeout
 - *(catalog)* Distinguish the ways a catalog root can be unusable
 
+### Refactor
+
+- *(catalog)* Report match specificity instead of making callers recompute it
+
 ### Documentation
 
 - Add DESIGN-0001, DESIGN-0002, and IMPL-0001 release docs
