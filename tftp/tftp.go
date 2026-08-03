@@ -285,10 +285,15 @@ func sendWithRetry(conn net.PacketConn, client net.Addr, pkt []byte, expectedBlo
 	return fmt.Errorf("timeout waiting for ACK of block %d after %d retries", expectedBlock, maxRetries)
 }
 
-// resolvePath maps a requested filename to an absolute path guaranteed to sit
-// under bootDir. Prefixing with "/" before Clean collapses any ".." so a request
-// like "../../etc/passwd" resolves under bootDir (and thus 404s) instead of
-// escaping it; the explicit prefix check is a second line of defense.
+// resolvePath maps a requested filename to an absolute path whose textual form
+// sits under bootDir. Prefixing with "/" before Clean collapses any ".." so a
+// request like "../../etc/passwd" resolves under bootDir (and thus 404s)
+// instead of escaping it; the explicit prefix check is a second line of defense.
+//
+// This is a lexical guard, not a filesystem one: it does not resolve symlinks,
+// so a symlink inside bootDir still escapes it. That is the accepted position —
+// the boot directory is operator-curated — and it is stated in
+// docs/go-ipxe/03-tftp-from-scratch.md. Do not read this as a sandbox.
 func (s *Server) resolvePath(filename string) (string, error) {
 	clean := filepath.Clean("/" + strings.TrimPrefix(filename, "/"))
 	bootDirAbs, err := filepath.Abs(s.bootDir)

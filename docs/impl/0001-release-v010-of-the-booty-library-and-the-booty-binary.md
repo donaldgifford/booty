@@ -29,6 +29,9 @@ created: 2026-07-29
     - [Tasks (Phase 3)](#tasks-phase-3)
     - [Success Criteria (Phase 3)](#success-criteria-phase-3)
     - [Blocked: the Docs workflow gates every PR on an unbuilt site](#blocked-the-docs-workflow-gates-every-pr-on-an-unbuilt-site)
+  - [Pre-release audit (2026-08-03)](#pre-release-audit-2026-08-03)
+    - [OQ-7: How much of the API reshaping lands before v0.1.0](#oq-7-how-much-of-the-api-reshaping-lands-before-v010)
+    - [OQ-8: TFTP amplification and socket exhaustion](#oq-8-tftp-amplification-and-socket-exhaustion)
   - [Phase 4: Cut v0.1.0](#phase-4-cut-v010)
     - [Tasks (Phase 4)](#tasks-phase-4)
     - [Success Criteria (Phase 4)](#success-criteria-phase-4)
@@ -364,6 +367,74 @@ rather than resolve it. So Phase 3's "every check green" criterion still cannot
 be fully met from inside IMPL-0001 — see the note in Dependencies.
 
 ---
+
+### Pre-release audit (2026-08-03)
+
+Three review passes over the public packages — API shape, Uber style, and
+security — while Phase 4 was blocked on the signing secrets. Every finding below
+was re-verified against the code before being recorded; the security pass
+confirmed its findings by driving the running servers with hostile input.
+
+Fixed in this branch, each with a test that fails against the previous code:
+
+| Defect                                                                  | Where                     |
+| ----------------------------------------------------------------------- | ------------------------- |
+| `tftp.Serve` truncated in-flight transfers on SIGTERM (guide promised otherwise) | `tftp/tftp.go`      |
+| `proxydhcp.Serve` ignored ctx entirely — leaked a goroutine per call     | `proxydhcp/proxydhcp.go`  |
+| `GET /boot/` returned an HTML directory index of every boot asset        | `httpsrv/httpsrv.go`      |
+| Identity strings reached templates unescaped — newline injection         | `httpsrv/httpsrv.go`      |
+| HCL diagnostics stringified with `%s`, breaking `errors.As`              | `catalog/source.go`       |
+| `TestHandleDHCPIgnoresNonPXE` never called `handleDHCP`                  | `proxydhcp/proxydhcp_test.go` |
+
+Not acted on — these need an owner decision, and the API ones are **breaking
+after v0.1.0**, so they belong before Phase 4 rather than after:
+
+- **API shape.** `proxydhcp.Serve(ctx, conn, binl bool)` is a naked-bool seam
+  (`ServeDHCP`/`ServeBINL` would read better); `catalog.Source` is an interface
+  with one implementation and no in-repo use, which CLAUDE.md's
+  no-speculative-extension-points rule forbids; `PortDHCP`/`PortBoot`/`PortBINL`
+  are the library's only exported constants while `tftp` keeps all of its
+  unexported; `httpsrv.New` returns no error and silently accepts an unparseable
+  `BaseURL`; `tftp.New` is positional while its three peers take a struct; and
+  `httpsrv.Options` vs `proxydhcp.Config` are two names for one concept.
+- **Missing sentinels.** `Match`'s "group references unknown profile" error has
+  no sentinel, so `httpsrv` cannot distinguish a broken catalog from an
+  unmatched machine and tells the operator to add a group — the wrong advice.
+  `DirSource.Load` cannot distinguish a missing directory from an empty one.
+- **Security posture.** TFTP is a measured 121x UDP amplifier bound to
+  `0.0.0.0:69` by default, and each unauthenticated datagram holds a socket for
+  the full 20s retry budget with no concurrency bound; `proxydhcp` honours the
+  unauthenticated `giaddr` field, letting any host on the segment aim booty's
+  reply at an arbitrary off-subnet IP; `--proxmox-token` is passed as a command
+  line argument and is therefore visible in `ps`; the TFTP `timeout` option is
+  echoed into the OACK unvalidated (RFC 2349 requires 1–255); and both path
+  guards are lexical, so a symlink in the boot dir escapes it — accepted
+  explicitly in `docs/go-ipxe/03-tftp-from-scratch.md`, but `tftp.go`'s comment
+  still claims the path is "guaranteed" to sit under `bootDir`, which is false.
+- **Tooling.** `gosec` is not enabled in `.golangci.yml` and not in CI, yet it
+  independently found two of the three confirmed defect classes.
+
+#### OQ-7: How much of the API reshaping lands before v0.1.0
+
+- **a. Take the breaking ones now (recommended).** v0 semver permits movement,
+  but every one of these costs a major-version conversation later. The list is
+  bounded and mechanical, and `cmd/booty` is the only in-tree consumer.
+- b. Ship v0.1.0 as-is and batch the changes into v0.2.0 — faster to a release,
+  but the homelab platform starts importing the shapes we already know are wrong.
+- c. Take only the two with behavioural consequences (`httpsrv.New` validating
+  `BaseURL`, the `Match` sentinel) and leave the naming to v0.2.0.
+
+#### OQ-8: TFTP amplification and socket exhaustion
+
+- **a. Bound in-flight transfers and require the first ACK before retransmitting
+  (recommended).** A concurrency cap plus not blind-retransmitting to a peer
+  that has never answered removes both the 121x amplification and the ~51 pkt/s
+  fd exhaustion, without a config surface.
+- b. Document the exposure and tell operators to bind `--tftp-addr` to a
+  provisioning VLAN — matches the trust model the guide already states, but
+  ships a known amplifier on a default of `0.0.0.0:69`.
+- c. Add a rate limiter with operator-tunable knobs — most control, most new
+  public surface for a v0.1.0.
 
 ### Phase 4: Cut v0.1.0
 
