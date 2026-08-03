@@ -18,6 +18,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* Record Phase 3 CI findings and the DESIGN-0002 blocker
 - *(impl)* Check off the plumbing-test PR task
 - Make docs/ markdownlint-clean and add the lint-md recipe
+- *(claude)* Record the GOTOOLCHAIN and markdown-lint gotchas
 
 ### Miscellaneous Tasks
 
