@@ -9,6 +9,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(deps)* Bump x/text and Go to clear two reachable vulnerabilities
 - *(justfile)* Pin GOTOOLCHAIN=local for the license recipes
+- *(tftp,proxydhcp)* Honour ctx cancellation on shutdown
+- *(httpsrv,catalog)* Close two injection paths found in the pre-release audit
 
 ### Documentation
 
@@ -19,6 +21,11 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* Check off the plumbing-test PR task
 - Make docs/ markdownlint-clean and add the lint-md recipe
 - *(claude)* Record the GOTOOLCHAIN and markdown-lint gotchas
+- *(impl)* Record the pre-release audit and its open decisions
+
+### Testing
+
+- *(proxydhcp)* Exercise handleDHCP instead of only the parser
 
 ### Miscellaneous Tasks
 
