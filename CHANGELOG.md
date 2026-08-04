@@ -3,6 +3,16 @@
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
+## [unreleased]
+
+### Bug Fixes
+
+- *(changelog)* Stop attributing the release to the v0.0.0 baseline
+
+### Documentation
+
+- *(impl)* Record Phase 4 — v0.1.0 published and verified
+
 ## [0.1.0] - 2026-08-04
 
 ### Features
