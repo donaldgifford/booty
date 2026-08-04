@@ -23,12 +23,15 @@
 //
 // Wire a catalog and renderer into a server and serve:
 //
-//	srv := httpsrv.New(httpsrv.Config{
+//	srv, err := httpsrv.New(httpsrv.Config{
 //		Catalog:  cat,
 //		Renderer: renderer,
 //		BootDir:  "/var/lib/booty/boot",
 //		BaseURL:  "http://192.168.1.10:8080",
 //	})
+//	if err != nil {
+//		return err // only an unusable BaseURL; see [ErrInvalidBaseURL]
+//	}
 //	if err := srv.ListenAndServe(ctx, ":8080"); err != nil {
 //		return err
 //	}

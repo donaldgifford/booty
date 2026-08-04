@@ -63,9 +63,13 @@ The wiring reuses the public seams the earlier chapters were careful to expose â
 so the test hosts booty's own code, not a reimplementation:
 
 ```go
-handler := rec.wrap(httpsrv.New(httpsrv.Config{
+bootSrv, err := httpsrv.New(httpsrv.Config{
 	Logger: logger, Catalog: cat, Renderer: renderer, BootDir: bootDir,
-}).Handler())
+})
+if err != nil {
+	t.Fatalf("httpsrv.New: %v", err)
+}
+handler := rec.wrap(bootSrv.Handler())
 
 ln, _ := net.Listen("tcp", "127.0.0.1:0")        // ephemeral loopback port
 srv := &http.Server{Handler: handler}

@@ -152,9 +152,13 @@ func startBooty(t *testing.T, bootDir, httpAddr, tftpAddr string) *booty {
 	}
 
 	rec := &recorder{}
-	handler := rec.wrap(httpsrv.New(httpsrv.Config{
+	bootSrv, err := httpsrv.New(httpsrv.Config{
 		Logger: logger, Catalog: cat, Renderer: renderer, BootDir: bootDir,
-	}).Handler())
+	})
+	if err != nil {
+		t.Fatalf("httpsrv.New: %v", err)
+	}
+	handler := rec.wrap(bootSrv.Handler())
 
 	// HTTP: our own listener so we can wrap the handler and learn the real port.
 	ln, err := net.Listen("tcp", httpAddr)

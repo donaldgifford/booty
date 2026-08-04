@@ -58,12 +58,16 @@ func rackHandler(b *testing.B, n int, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	return New(Config{
+	srv, err := New(Config{
 		Logger:   logger,
 		Catalog:  rackCatalog(n),
 		Renderer: r,
 		BaseURL:  "http://192.168.1.10:8080",
-	}).Handler()
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+	return srv.Handler()
 }
 
 // lastMACTarget is the URL for the last MAC-pinned node, so Match scans every
@@ -178,8 +182,11 @@ func BenchmarkBootAssetDownload(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	h := New(Config{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), BootDir: dir}).Handler()
-	srv := httptest.NewServer(h)
+	bootSrv, err := New(Config{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), BootDir: dir})
+	if err != nil {
+		b.Fatal(err)
+	}
+	srv := httptest.NewServer(bootSrv.Handler())
 	b.Cleanup(srv.Close)
 
 	for _, clients := range []int{1, 8, 32} {

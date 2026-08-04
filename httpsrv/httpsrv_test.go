@@ -48,7 +48,11 @@ func newTestServer(t *testing.T, cfg Config) http.Handler {
 		}
 		cfg.Renderer = r
 	}
-	return New(cfg).Handler()
+	srv, err := New(cfg)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return srv.Handler()
 }
 
 func get(t *testing.T, h http.Handler, target string) *httptest.ResponseRecorder {
@@ -59,7 +63,7 @@ func get(t *testing.T, h http.Handler, target string) *httptest.ResponseRecorder
 }
 
 func TestHealthz(t *testing.T) {
-	rec := get(t, New(Config{Logger: quiet()}).Handler(), "/healthz")
+	rec := get(t, newTestServer(t, Config{}), "/healthz")
 	if rec.Code != http.StatusOK || rec.Body.String() != "ok\n" {
 		t.Fatalf("healthz = %d %q", rec.Code, rec.Body.String())
 	}
@@ -382,7 +386,7 @@ func TestProxmoxAnswerGETNotAllowed(t *testing.T) {
 
 func TestRoutesGatedByDeps(t *testing.T) {
 	// A health-only server (no catalog/renderer/bootDir) must not expose /ipxe.
-	h := New(Config{Logger: quiet()}).Handler()
+	h := newTestServer(t, Config{})
 	if rec := get(t, h, "/ipxe?mac=x"); rec.Code != http.StatusNotFound {
 		t.Fatalf("/ipxe without catalog = %d, want 404", rec.Code)
 	}

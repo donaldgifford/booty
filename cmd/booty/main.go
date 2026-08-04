@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/url"
 	"os"
 	"os/signal"
 	"sync"
@@ -168,12 +167,6 @@ func cmdServe(args []string) int {
 	logger := newLogger(c.logFormat)
 	slog.SetDefault(logger)
 
-	if err := checkBaseURL(c.baseURL); err != nil {
-		logger.Error("invalid --url", "err", err,
-			"hint", "give an absolute URL machines can reach, e.g. http://192.168.1.10:8080")
-		return 2
-	}
-
 	// A SIGINT/SIGTERM cancels ctx, which each server observes to shut down.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -205,7 +198,7 @@ func cmdServe(args []string) int {
 	var wg sync.WaitGroup
 	errc := make(chan error, 3)
 
-	httpServer := httpsrv.New(httpsrv.Config{
+	httpServer, err := httpsrv.New(httpsrv.Config{
 		Logger:           logger,
 		Catalog:          cat,
 		Renderer:         renderer,
@@ -213,6 +206,11 @@ func cmdServe(args []string) int {
 		BaseURL:          c.baseURL,
 		ProxmoxAuthToken: c.proxmoxToken,
 	})
+	if err != nil {
+		logger.Error("http init failed", "err", err,
+			"hint", "--url must be an absolute URL machines can reach, e.g. http://192.168.1.10:8080")
+		return 2
+	}
 	wg.Go(func() {
 		if err := httpServer.ListenAndServe(ctx, c.httpAddr); err != nil {
 			errc <- fmt.Errorf("http: %w", err)
@@ -283,38 +281,6 @@ func newProxyDHCP(enabled bool, serverIP string, logger *slog.Logger) (*proxydhc
 		return nil, false
 	}
 	return proxy, true
-}
-
-// checkBaseURL rejects a --url that machines cannot chain to.
-//
-// Everything booty generates — the iPXE chain script, kernel and initrd paths,
-// the config endpoints — is this string with a path glued on. A value that is
-// not an absolute URL still starts the server and still answers 200; the damage
-// only shows up as machines failing to boot, with nothing in booty's log to
-// connect it to a typo made days earlier.
-//
-// Parsing alone is not enough to catch that. url.Parse does reject
-// "192.168.1.10:8080", but a bare "boot.example.com" parses happily as a
-// relative path — empty scheme, empty host — which is why the scheme and host
-// are checked explicitly rather than trusting err.
-//
-// Empty is fine and is the default — it means "derive the base from each
-// request's Host header", which is what a single-subnet setup wants.
-func checkBaseURL(raw string) error {
-	if raw == "" {
-		return nil
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return fmt.Errorf("parsing %q: %w", raw, err)
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("%q needs an http:// or https:// scheme", raw)
-	}
-	if u.Host == "" {
-		return fmt.Errorf("%q has no host", raw)
-	}
-	return nil
 }
 
 // newRenderer builds the renderer, layering an operator template-override

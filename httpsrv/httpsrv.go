@@ -48,11 +48,25 @@ type Server struct {
 	proxmoxToken string
 }
 
+// ErrInvalidBaseURL is returned by New when [Config.BaseURL] is set to
+// something that cannot be used as a URL prefix.
+var ErrInvalidBaseURL = errors.New("invalid BaseURL")
+
 // New returns a Server. A nil logger falls back to slog.Default.
-func New(cfg Config) *Server {
+//
+// It errors only on an unusable BaseURL. That is worth an error return because
+// BaseURL is not consumed here — it is glued to a path and handed to machines
+// that are mid-boot with no way to report back, so a bad value produces a
+// server that starts, answers 200, and quietly emits scripts nothing can
+// follow. Every other field is either optional by design (a nil Catalog just
+// means those routes are not registered) or fails visibly at first use.
+func New(cfg Config) (*Server, error) {
 	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if err := checkBaseURL(cfg.BaseURL); err != nil {
+		return nil, err
 	}
 	return &Server{
 		logger:       logger,
@@ -61,7 +75,32 @@ func New(cfg Config) *Server {
 		bootDir:      cfg.BootDir,
 		baseURL:      strings.TrimRight(cfg.BaseURL, "/"),
 		proxmoxToken: cfg.ProxmoxAuthToken,
+	}, nil
+}
+
+// checkBaseURL rejects a BaseURL that machines cannot fetch from. Empty is
+// valid and is the default: it means "derive the base from each request's Host
+// header", which is what a single-subnet deployment wants.
+//
+// Parsing alone is not enough. url.Parse rejects "192.168.1.10:8080" for the
+// colon in its first path segment, but a bare "boot.example.com" parses
+// happily as a relative path with no scheme and no host — so both are checked
+// explicitly rather than trusting err.
+func checkBaseURL(raw string) error {
+	if raw == "" {
+		return nil
 	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("%w %q: %w", ErrInvalidBaseURL, raw, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("%w %q: needs an http:// or https:// scheme", ErrInvalidBaseURL, raw)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("%w %q: no host", ErrInvalidBaseURL, raw)
+	}
+	return nil
 }
 
 // Handler builds the routed, middleware-wrapped http.Handler. Routes light up

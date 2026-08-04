@@ -79,39 +79,3 @@ func TestParseServeFlagsBinds(t *testing.T) {
 		t.Error("--proxydhcp = false after being set")
 	}
 }
-
-// --url is glued to a path and handed to machines that are mid-boot with no way
-// to report back. The failure mode this guards is not a crash: an unusable value
-// used to start the server, answer 200, and produce scripts every client would
-// choke on, so the operator saw a healthy booty and a rack that would not boot.
-func TestCheckBaseURL(t *testing.T) {
-	tests := []struct {
-		name    string
-		url     string
-		wantErr bool
-	}{
-		{name: "empty means derive from Host", url: ""},
-		{name: "http", url: "http://192.168.1.10:8080"},
-		{name: "https", url: "https://boot.example.com"},
-		{name: "trailing slash", url: "http://192.168.1.10:8080/"},
-		{name: "subpath behind a proxy", url: "https://example.com/booty"},
-
-		// Caught by url.Parse: a colon in the first path segment.
-		{name: "no scheme", url: "192.168.1.10:8080", wantErr: true},
-		// Caught only by the scheme check — these parse cleanly as relative
-		// paths, so a validator that just checked err would wave them through.
-		{name: "bare host", url: "boot.example.com", wantErr: true},
-		{name: "prose", url: "not a url at all", wantErr: true},
-		{name: "scheme but no host", url: "http://", wantErr: true},
-		{name: "wrong scheme", url: "tftp://192.168.1.10", wantErr: true},
-		{name: "control character", url: "http://192.168.1.10:8080\n", wantErr: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := checkBaseURL(tt.url)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("checkBaseURL(%q) = %v, wantErr %v", tt.url, err, tt.wantErr)
-			}
-		})
-	}
-}

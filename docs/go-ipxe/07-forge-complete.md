@@ -214,10 +214,14 @@ defer stop()
 var wg sync.WaitGroup
 errc := make(chan error, 3)
 
-httpServer := httpsrv.New(httpsrv.Config{
+httpServer, err := httpsrv.New(httpsrv.Config{
 	Logger: logger, Catalog: cat, Renderer: renderer,
 	BootDir: *bootDir, BaseURL: *baseURL, ProxmoxAuthToken: *proxmoxToken,
 })
+if err != nil { // an unusable --url, caught before anything binds a port
+	logger.Error("http init failed", "err", err)
+	return 2
+}
 wg.Go(func() {
 	if err := httpServer.ListenAndServe(ctx, *httpAddr); err != nil {
 		errc <- fmt.Errorf("http: %w", err)
