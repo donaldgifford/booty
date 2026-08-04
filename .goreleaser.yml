@@ -67,20 +67,33 @@ signs:
 changelog:
   use: github
   sort: asc
+  # Every pattern below tolerates a scope and a breaking-change "!", because
+  # this repo scopes nearly every commit. The unscoped forms these started as
+  # (`^fix:`, `^chore:`) matched almost nothing, so v0.1.1's notes filed each
+  # real fix under "Others" and listed the changelog-regeneration commits that
+  # were supposed to be excluded.
   filters:
     exclude:
-      - "^docs:"
-      - "^test:"
-      - "^chore:"
+      - '^docs(\(.+\))?!?:'
+      - '^test(\(.+\))?!?:'
+      - '^chore(\(.+\))?!?:'
+      - '^ci(\(.+\))?!?:'
+      - '^style(\(.+\))?!?:'
       - Merge pull request
       - Merge branch
   groups:
     - title: Features
-      regexp: "^feat:"
+      regexp: '^feat(\(.+\))?!?:'
       order: 0
     - title: Bug Fixes
-      regexp: "^fix:"
+      regexp: '^fix(\(.+\))?!?:'
       order: 1
+    - title: Refactor
+      regexp: '^refactor(\(.+\))?!?:'
+      order: 2
+    - title: Performance
+      regexp: '^perf(\(.+\))?!?:'
+      order: 3
     - title: Others
       order: 999
 
