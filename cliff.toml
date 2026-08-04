@@ -51,6 +51,15 @@ sort_commits = "oldest"
 recurse_submodules = false
 use_branch_tags = false
 
+# v0.0.0 is a baseline for pr-semver-bump, not a release — nothing was ever
+# published under it. It sits at the merge commit of the pre-v0.1.0 work
+# (IMPL-0001 OQ-4), so without this every commit before that point was filed
+# under a version nobody can install, and v0.1.0 read as though it shipped one
+# packaging fix. Ignoring the tag folds those commits into the release that
+# actually carried them; skip_tags is the wrong knob here, as it discards the
+# commits outright rather than reattributing them.
+ignore_tags = "^v0\\.0\\.0$"
+
 commit_preprocessors = [
   { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](<REPO>/issues/${2}))" },
 ]
