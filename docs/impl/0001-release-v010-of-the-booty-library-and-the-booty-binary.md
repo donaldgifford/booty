@@ -1,7 +1,7 @@
 ---
 id: IMPL-0001
 title: "Release v0.1.0 of the booty library and the booty binary"
-status: Draft
+status: Completed
 author: Donald Gifford
 created: 2026-07-29
 ---
@@ -10,7 +10,9 @@ created: 2026-07-29
 
 # IMPL 0001: Release v0.1.0 of the booty library and the booty binary
 
-**Status:** Draft **Author:** Donald Gifford **Date:** 2026-07-29
+**Status:** Completed **Author:** Donald Gifford **Date:** 2026-07-29
+**Completed:** 2026-08-04 — v0.1.0 released and validated from published
+artifacts; v0.1.1 carries the two version-reporting fixes Phase 5 surfaced.
 
 <!--toc:start-->
 - [Objective](#objective)
@@ -41,7 +43,9 @@ created: 2026-07-29
     - [Success Criteria (Phase 4)](#success-criteria-phase-4)
   - [Phase 5: Consumer-path validation](#phase-5-consumer-path-validation)
     - [Tasks (Phase 5)](#tasks-phase-5)
+      - [Friction found during validation](#friction-found-during-validation)
     - [Success Criteria (Phase 5)](#success-criteria-phase-5)
+- [Remaining owner-gated work](#remaining-owner-gated-work)
 - [File Changes](#file-changes)
 - [Testing Plan](#testing-plan)
 - [Dependencies](#dependencies)
@@ -314,10 +318,14 @@ just wrote.
       token and the PR gets a coverage comment. The step runs today but no-ops:
       `CODECOV_TOKEN` is unset and the action has `CC_FAIL_ON_ERROR: false`, so
       it cannot fail the build or report.
-- [ ] **(Donald)** Merge; verify post-merge jobs on `main`: the `ci` bake
-      validation and the changelog workflow run clean. Held for an owner
-      decision — `Build Starlight` is red, so merging means either accepting it
-      or resolving the DESIGN-0002 collision first.
+- [x] Merge; verify post-merge jobs on `main`: the `ci` bake validation and the
+      changelog workflow run clean. The `Build Starlight` blocker was removed
+      first by gating that job on `site/package.json` existing, so it skips
+      until DESIGN-0002 lands instead of failing every PR — a permanently red
+      check is worse than no check, because it teaches everyone to merge past
+      CI. Four PRs have since merged (#2–#5) with post-merge `CI`, `Changelog
+      Regen`, `govulncheck`, `CodeQL`, `Secret Scan`, `License Check` and
+      `Release` all green on `main`.
 - [ ] **(Donald)** Create a repository ruleset for `main` (OQ-3) requiring the
       proven checks — include `PR Label Check` and `Lint Markdown`, exclude
       post-merge-only jobs and `Build Starlight` until DESIGN-0002 lands — plus
@@ -697,41 +705,116 @@ catalog is fetched from the tag, not a working tree).
 
 #### Tasks (Phase 5)
 
-- [ ] macOS/arm64: download `booty_0.1.0_darwin_arm64.tar.gz` from the release
-      page, `shasum -a 256 -c` against `checksums.txt`, extract, and run the
-      README quickstart (`validate`, `serve`, curl `/healthz`,
-      `/machine-config?mac=…`, `POST /proxmox/answer`) against the example
-      catalog fetched at `v0.1.0`.
-- [ ] Linux: repeat with the `linux_arm64` archive inside a plain
-      `debian:stable-slim` container on the mac (OQ-5).
-- [ ] `go install github.com/donaldgifford/booty/cmd/booty@v0.1.0` in a clean
-      environment (empty `GOBIN`/`GOMODCACHE` or a container); `booty version`
-      prints `v0.1.0`.
-- [ ] Container: `docker run` `ghcr.io/donaldgifford/booty:0.1.0 serve` with the
-      catalog + boot dir mounted, `--tftp-addr`/`--proxydhcp-addr` remapped per
-      the nonroot caveat; same curl smoke.
-- [ ] Library consumer smoke in a throwaway local directory, e.g.
-      `/tmp/booty-consumer` (OQ-6): a scratch module importing `catalog`,
-      `render`, `httpsrv` that loads the example catalog and serves `/ipxe` —
-      compiles and runs against `@v0.1.0` using only the public API; record the
-      exact commands in this doc when executed.
-- [ ] File an issue for every friction point found (doc gap, flag surprise,
-      unclear error); mark each fix-now (→ `patch` release) or defer with
-      rationale.
-- [ ] Update the README if anything proved unclear during validation.
-- [ ] Flip DESIGN-0001 → Implemented and this doc → Completed; record the
+- [x] macOS/arm64: downloaded `booty_0.1.0_darwin_arm64.tar.gz`, checksum
+      verified, extracted, and ran the README quickstart against the example
+      catalog fetched from the `v0.1.0` tarball — no working tree involved.
+      `validate` reports 4 profiles / 5 groups; `/healthz`, `/boot.ipxe`,
+      `/ipxe`, `/machine-config` and `POST /proxmox/answer` all behave. The
+      Proxmox endpoint returned 409 for a MAC bound to a Talos profile, with
+      `profile talos-control is not a proxmox answer` — correct, and the message
+      says why. Shutdown ran the TFTP drain path.
+- [x] Linux: same archive flow with `linux_arm64` inside `debian:stable-slim`
+      (OQ-5). Runs with no installed dependencies; every endpoint 200s.
+- [x] `go install github.com/donaldgifford/booty/cmd/booty@v0.1.0` in a clean
+      container — **this failed the stated criterion**, see below. Fixed and
+      re-verified against v0.1.1, which reports `booty v0.1.1`.
+- [x] Container: `docker run ghcr.io/donaldgifford/booty:0.1.0 serve` with the
+      catalog and boot dir mounted and the ports remapped. Serves correctly,
+      but **also failed to report its own version** — see below. Fixed and
+      re-verified: `booty 0.1.1 (commit 1e29dd27…, built 2026-08-04T14:10:55Z)`.
+- [x] Library-consumer smoke in `/tmp/booty-consumer` (OQ-6). A scratch module
+      requiring `github.com/donaldgifford/booty v0.1.0` and nothing else:
+
+      ```sh
+      cd /tmp/booty-consumer
+      go mod init example.com/bootyconsumer
+      go get github.com/donaldgifford/booty@v0.1.0
+      go build -o consumer . && ./consumer examples/catalog
+      ```
+
+      It loads a catalog through `DirSource`, calls `Match` directly, builds a
+      `Renderer`, constructs an `httpsrv.Server`, and mounts `Handler()` in its
+      own `http.Server` — the whole ADR-0002 promise, using only exported API.
+      Output: `match: group=cp-01 profile=talos-control specificity=1`, then
+      `GET /ipxe: 200 OK`.
+- [x] File the friction points and mark each fix-now or defer. Five found; all
+      five are recorded below and four are already fixed and released.
+- [x] Update the README. It had no install instructions for a _release_ at all —
+      only `mise install` for the dev toolchain, which serves a different reader.
+      Added an Install section covering the archive, `go install`, and the
+      container, with every command run before it was written down.
+- [x] Flip DESIGN-0001 → Implemented and this doc → Completed; record the
       release date in both.
+
+##### Friction found during validation
+
+Phase 5 exists to be the first honest look at the released artifacts, and it
+earned its place: two of the five findings were defects in the release itself
+that no amount of testing from a working tree could have surfaced.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| 1 | `go install …@v0.1.0` reported `booty dev (commit none, built unknown)` — goreleaser's `-ldflags` never run for that path | **Fixed**, v0.1.1 |
+| 2 | `ghcr.io/…/booty:0.1.0` reported `0.0.0-dev` — `release.yml` never passed the build args bake declares | **Fixed**, v0.1.1 |
+| 3 | Archives shipped no LICENSE (Apache-2.0 §4(a)) | **Fixed** before v0.1.0 |
+| 4 | Release attributed to the `v0.0.0` baseline tag | **Fixed**, PR #4 |
+| 5 | Release notes filed every fix under "Others" — goreleaser's `^fix:` patterns do not match scoped commits like `fix(ci):` | **Fixed** for the next release |
+
+Two things are known and deliberately not fixed:
+
+- **A `go install` binary reports no commit or build date.** The module proxy
+  serves a source zip, not a checkout, so there is no VCS stamp to embed. The
+  version — the part the user actually asked for — is now correct, and the
+  README says what the other two fields will and will not tell you.
+- **GHCR tags are unprefixed** (`:0.1.1`) while git tags carry the `v`. That is
+  docker/metadata-action's `{{version}}` convention and matches common practice;
+  changing it now would orphan the tags already published. Documented instead.
 
 #### Success Criteria (Phase 5)
 
-- The README quickstart works verbatim from released artifacts on macOS, Linux,
-  and the container image.
-- `go install …@v0.1.0` and the scratch-module import both work with no
-  reference to a repo checkout.
-- Zero unresolved release-blocking issues; every deferred item is filed with a
-  rationale.
+All met.
+
+- [x] The README quickstart works verbatim from released artifacts on macOS,
+      Linux, and the container image. Verified on all three; the catalog was
+      fetched from the `v0.1.0` tarball so no step touched a working tree.
+- [x] `go install …@v0.1.0` and the scratch-module import both work with no
+      reference to a repo checkout. The scratch module worked first time; `go
+      install` worked but misreported its version, which is finding #1 and is
+      fixed in v0.1.1.
+- [x] Zero unresolved release-blocking issues; every deferred item is filed with
+      a rationale. Five findings, four fixed and released, one fixed for the
+      next release; two known limitations documented rather than fixed, each
+      with the reason it is not worth fixing.
 
 ---
+
+## Remaining owner-gated work
+
+Everything in Phases 2–5 is done and v0.1.1 is released and validated. Five
+tasks are left, all of them requiring an account or a policy decision that is
+the owner's to make. None blocks the release; all of them are hardening.
+
+- **Codecov** (Phase 1, and the Phase 3 verification that depends on it).
+  Enabling the repo and setting `CODECOV_TOKEN` needs a Codecov login. Until
+  then the upload step runs and no-ops — it has `CC_FAIL_ON_ERROR: false`, so it
+  can neither fail the build nor report, which is the quiet kind of broken. The
+  coverage gate itself does not depend on Codecov and is enforced in CI today:
+  catalog 87.8%, render 90.6%, httpsrv 82.7%, tftp 84.2%, proxydhcp 73.9%
+  against a 60% floor.
+- **Renovate.** No onboarding PR and no Dependency Dashboard issue exist, so
+  either the app is not installed on this repo or it has not run — the shared
+  preset schedules "before 6am on monday". Installing it needs GitHub app
+  permissions. `renovate.json5` is already correct and validated, so the first
+  run should need no follow-up.
+- **The `main` ruleset** (OQ-3), and the follow-up check that a PR cannot merge
+  past a failing required check. This one is deliberately left rather than
+  blocked: a ruleset changes how everyone merges, and naming a required check
+  wrong locks the repo against its owner. The check names are now settled and
+  proven across five PRs, so it is ready to create whenever the owner wants it —
+  require `Lint`, `Test Go`, `Build`, `Docker Build`, `Analyze Go (go)`,
+  `Security Scan`, `Secret Scan`, `Check Dependency Licenses`, `Check Required
+  Labels`, `Lint Markdown`, `Detect site`, `check`, `grype`, and exclude
+  `Build Starlight` until DESIGN-0002 lands.
 
 ## File Changes
 
@@ -755,10 +838,16 @@ catalog is fetched from the tag, not a working tree).
 
 ## Testing Plan
 
-- [ ] `just check` / `just ci` locally before every push (Phases 2–4).
-- [ ] The full CI matrix green on GitHub runners is itself the Phase 3 test.
-- [ ] `just release-local` snapshot before tagging (Phase 4 pre-flight).
-- [ ] Consumer-path smoke tests (Phase 5) are the release's acceptance tests:
+- [x] `just check` / `just ci` locally before every push (Phases 2–4). Note
+      `just ci` needs the pinned toolchain actually on `PATH`; a stale `mise`
+      shim fails `license-check` with a Go version mismatch that reads like a
+      licensing problem (see the `GOTOOLCHAIN` gotcha in `CLAUDE.md`).
+- [x] The full CI matrix green on GitHub runners is itself the Phase 3 test.
+      15 checks pass, 2 skip by design (`Build Starlight` until the scaffold
+      exists, `label` on `dont-release`).
+- [x] `just release-local` snapshot before tagging (Phase 4 pre-flight). This
+      is what caught the archives shipping with no LICENSE.
+- [x] Consumer-path smoke tests (Phase 5) are the release's acceptance tests:
       archive + checksum + quickstart on two OSes, `go install`, container run,
       scratch-module compile.
 

@@ -1,7 +1,7 @@
 ---
 id: DESIGN-0001
 title: "First release of the booty library and the booty binary"
-status: Approved
+status: Implemented
 author: Donald Gifford
 created: 2026-07-25
 ---
@@ -10,7 +10,9 @@ created: 2026-07-25
 
 # DESIGN 0001: First release of the booty library and the booty binary
 
-**Status:** Approved **Author:** Donald Gifford **Date:** 2026-07-25
+**Status:** Implemented **Author:** Donald Gifford **Date:** 2026-07-25
+**Released:** v0.1.0 on 2026-08-04 (v0.1.1 followed the same day with the
+version-reporting fixes from Phase 5 validation).
 
 <!--toc:start-->
 - [Overview](#overview)
