@@ -32,6 +32,9 @@ created: 2026-07-29
   - [Pre-release audit (2026-08-03)](#pre-release-audit-2026-08-03)
     - [OQ-7: How much of the API reshaping lands before v0.1.0](#oq-7-how-much-of-the-api-reshaping-lands-before-v010)
     - [OQ-8: TFTP amplification and socket exhaustion](#oq-8-tftp-amplification-and-socket-exhaustion)
+  - [Phase 3b: Settle the API and close the TFTP exposure (OQ-7a, OQ-8a)](#phase-3b-settle-the-api-and-close-the-tftp-exposure-oq-7a-oq-8a)
+    - [Tasks (Phase 3b)](#tasks-phase-3b)
+    - [Success Criteria (Phase 3b)](#success-criteria-phase-3b)
   - [Phase 4: Cut v0.1.0](#phase-4-cut-v010)
     - [Tasks (Phase 4)](#tasks-phase-4)
     - [Success Criteria (Phase 4)](#success-criteria-phase-4)
@@ -508,6 +511,8 @@ after v0.1.0**, so they belong before Phase 4 rather than after:
 
 #### OQ-7: How much of the API reshaping lands before v0.1.0
 
+**Answered: a — take the breaking ones now.** Tracked as Phase 3b below.
+
 - **a. Take the breaking ones now (recommended).** v0 semver permits movement,
   but every one of these costs a major-version conversation later. The list is
   bounded and mechanical, and `cmd/booty` is the only in-tree consumer.
@@ -518,6 +523,9 @@ after v0.1.0**, so they belong before Phase 4 rather than after:
 
 #### OQ-8: TFTP amplification and socket exhaustion
 
+**Answered: a — bound in-flight transfers and require the first ACK.** Tracked
+as Phase 3b below.
+
 - **a. Bound in-flight transfers and require the first ACK before retransmitting
   (recommended).** A concurrency cap plus not blind-retransmitting to a peer
   that has never answered removes both the 121x amplification and the ~51 pkt/s
@@ -527,6 +535,63 @@ after v0.1.0**, so they belong before Phase 4 rather than after:
   ships a known amplifier on a default of `0.0.0.0:69`.
 - c. Add a rate limiter with operator-tunable knobs — most control, most new
   public surface for a v0.1.0.
+
+### Phase 3b: Settle the API and close the TFTP exposure (OQ-7a, OQ-8a)
+
+The pre-release audit surfaced two classes of problem that are cheap now and
+expensive after v0.1.0 ships: six API shapes that are wrong, and a TFTP server
+that is a usable reflector on its default bind. v0 semver permits moving the
+API, but the homelab platform starts importing these packages the moment they
+are tagged, and "we already know that shape is wrong" is a bad thing to say to
+your only consumer. Both answered **a**; this phase is the work.
+
+These changes are deliberately breaking. `cmd/booty` is the only in-tree
+consumer, so the blast radius is one directory plus the `docs/go-ipxe/`
+walkthrough, which must stay guide==code.
+
+#### Tasks (Phase 3b)
+
+- [ ] **API: one name for one concept.** `httpsrv.Options` and
+      `proxydhcp.Config` name the same thing. Standardise on `Config` across
+      `httpsrv`, `proxydhcp`, and `tftp`; `render` keeps `Option` because its
+      functional options are a genuinely different thing.
+- [ ] **API: `tftp.New` takes a struct.** It is positional
+      (`New(bootDir, logger)`) while its three peers take a struct, so it is the
+      one constructor that cannot gain a field without breaking callers — and
+      OQ-8 needs it to gain one.
+- [ ] **API: split `proxydhcp.Serve`'s naked bool.** `Serve(ctx, conn, binl bool)`
+      forces every call site to encode a protocol distinction as `true`.
+      `ServeDHCP` / `ServeBINL` say which is which at the call site.
+- [ ] **API: `httpsrv.New` returns an error.** It silently accepts a `BaseURL`
+      it cannot use. `cmd/booty` now validates its own `--url` flag, but a
+      library that accepts unusable input and fails much later, in someone
+      else's rack, is the wrong default for every other consumer.
+- [ ] **API: drop the `catalog.Source` interface.** One implementation, no
+      in-repo use of the abstraction — exactly the speculative extension point
+      CLAUDE.md forbids. Keep `DirSource`; the interface can come back when a
+      second source exists.
+- [ ] **API: unexport `PortDHCP`/`PortBoot`/`PortBINL`.** The library's only
+      exported constants, for values already expressed as address-string
+      defaults in `cmd/booty`. `tftp` keeps port 69 unexported and is fine.
+- [ ] **TFTP: bound in-flight transfers.** 200 unanswered RRQs take the process
+      from 3 goroutines to 204, each pinning a socket for the full 20s retry
+      budget — roughly 51 pkt/s to exhaust the fd table. A cap sheds load
+      instead of falling over, with no new config surface.
+- [ ] **TFTP: require the first ACK before retransmitting.** The measured 121x
+      amplification comes from blind-retransmitting DATA to a peer that has
+      never spoken. A spoofed source address gets one datagram, not the whole
+      retry budget.
+- [ ] Update `docs/go-ipxe/` for every signature change — the walkthrough is the
+      code (ADR-0002), so a stale snippet is a broken build for anyone
+      following it.
+
+#### Success Criteria (Phase 3b)
+
+- `just ci` clean; every library package still meets the 60% coverage gate.
+- The amplification factor and the goroutine-per-RRQ growth are both measured
+  again and shown to be bounded, by tests that fail against the old code.
+- `docs/go-ipxe/` compiles as written; no snippet references a removed name.
+- `go doc` for each changed package reads correctly.
 
 ### Phase 4: Cut v0.1.0
 
