@@ -5,6 +5,10 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Features
+
+- *(httpsrv)* [**breaking**] New validates BaseURL and returns an error
+
 ### Bug Fixes
 
 - *(deps)* Bump x/text and Go to clear two reachable vulnerabilities
@@ -15,10 +19,15 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(catalog)* Distinguish the ways a catalog root can be unusable
 - *(ci)* Gate the Starlight build on the site scaffold existing
 - *(cmd)* Reject a --url that machines cannot chain to
+- *(tftp)* Bound in-flight transfers and stop amplifying to silent peers
 
 ### Refactor
 
 - *(catalog)* Report match specificity instead of making callers recompute it
+- *(httpsrv)* [**breaking**] Rename Options to Config
+- *(tftp)* [**breaking**] New takes a Config struct
+- *(proxydhcp)* [**breaking**] Split Serve's bool, unexport the port constants
+- *(catalog)* [**breaking**] Drop the Source interface
 
 ### Documentation
 
@@ -32,6 +41,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* Record the pre-release audit and its open decisions
 - *(impl)* Record what Phase 4 pre-flight has already verified
 - *(impl)* Record the first measured performance data
+- *(impl)* Record OQ-7a/OQ-8a and add Phase 3b
 
 ### Performance
 
