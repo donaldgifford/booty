@@ -32,6 +32,6 @@ docz create design "Your Design Title"
 
 | ID | Title | Status | Date | Author | Link |
 |----|-------|--------|------|--------|------|
-| DESIGN-0001 | First release of the booty library and the booty binary | Approved | 2026-07-25 | Donald Gifford | [0001-first-release-of-the-booty-library-and-the-booty-binary.md](0001-first-release-of-the-booty-library-and-the-booty-binary.md) |
+| DESIGN-0001 | First release of the booty library and the booty binary | Implemented | 2026-07-25 | Donald Gifford | [0001-first-release-of-the-booty-library-and-the-booty-binary.md](0001-first-release-of-the-booty-library-and-the-booty-binary.md) |
 | DESIGN-0002 | Starlight docs site on Cloudflare | Approved | 2026-07-25 | Donald Gifford | [0002-starlight-docs-site-on-cloudflare-pages.md](0002-starlight-docs-site-on-cloudflare-pages.md) |
 <!-- END DOCZ AUTO-GENERATED -->

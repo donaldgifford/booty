@@ -56,6 +56,29 @@ failure modes — in a ten-chapter walkthrough:
 the same thing: every chapter produces the real, compiling, tested packages
 above, and ends with commands you can run.
 
+## Install
+
+Pick whichever fits; all three are validated against each release.
+
+```sh
+# Release archive (see "Verifying a release" below before trusting it)
+curl -fsSLO https://github.com/donaldgifford/booty/releases/latest/download/booty_0.1.1_linux_amd64.tar.gz
+tar xzf booty_0.1.1_linux_amd64.tar.gz && install booty ~/.local/bin/
+
+# From source, by version
+go install github.com/donaldgifford/booty/cmd/booty@latest
+
+# Container
+docker pull ghcr.io/donaldgifford/booty:0.1.1
+```
+
+Archives are published for linux and darwin on amd64 and arm64. Container tags
+are unprefixed — `:0.1.1`, not `:v0.1.1` — while git tags carry the `v`.
+
+A `go install` binary knows its version but not its commit or build date: the
+module proxy serves a source zip, not a checkout, so there is no VCS stamp to
+embed. The release archives and the container image report all three.
+
 ## Quickstart
 
 ```sh
