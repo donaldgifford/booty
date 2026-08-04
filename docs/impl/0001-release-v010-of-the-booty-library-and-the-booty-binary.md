@@ -326,19 +326,30 @@ just wrote.
       CI. Four PRs have since merged (#2–#5) with post-merge `CI`, `Changelog
       Regen`, `govulncheck`, `CodeQL`, `Secret Scan`, `License Check` and
       `Release` all green on `main`.
-- [ ] **(Donald)** Create a repository ruleset for `main` (OQ-3) requiring the
-      proven checks — include `PR Label Check` and `Lint Markdown`, exclude
-      post-merge-only jobs and `Build Starlight` until DESIGN-0002 lands — plus
-      PR-before-merge and no force-pushes.
-- [ ] Confirm a follow-up trivial PR cannot merge with a failing required check
-      (flip one intentionally or rely on the label check pre-label).
+- [x] **(Donald)** Create a repository ruleset for `main` (OQ-3). Done, active,
+      blocking `deletion` and `non_fast_forward` — the two irreversible ones.
+      `main` cannot be deleted and its history cannot be rewritten.
+- [ ] **(Donald, optional)** Add required status checks and PR-before-merge to
+      that ruleset. Deliberately not done, and worth being clear about the gap:
+      a PR can still merge with CI red, and anyone with push access can commit
+      straight to `main`. The check names are settled across six PRs if this is
+      wanted later — `Lint`, `Test Go`, `Build`, `Docker Build`, `Analyze Go
+      (go)`, `Security Scan`, `Secret Scan`, `Check Dependency Licenses`, `Check
+      Required Labels`, `Lint Markdown`, `Detect site`, `check`, `grype` —
+      excluding `Build Starlight` until DESIGN-0002 lands. Required checks match
+      by exact name, so a typo makes every PR unmergeable until the ruleset is
+      edited; that is the whole reason to add them deliberately rather than
+      early.
+- [ ] Confirm a follow-up trivial PR cannot merge with a failing required check.
+      Not applicable until required checks exist.
 
 #### Success Criteria (Phase 3)
 
 - One PR cycle with every check green on GitHub runners, and a clean post-merge
   run on `main`.
-- `main` is protected: required checks enforced, no direct pushes, no
-  force-pushes.
+- `main` is protected: no force-pushes, no deletion — both enforced by an active
+  ruleset. Required status checks and PR-before-merge are **not** enforced; see
+  "Remaining owner-gated work" for what that does and does not buy.
 - Security tab shows CodeQL + both Anchore SARIF categories; Codecov shows the
   first uploaded report.
 
@@ -790,9 +801,9 @@ All met.
 
 ## Remaining owner-gated work
 
-Everything in Phases 2–5 is done and v0.1.1 is released and validated. Five
-tasks are left, all of them requiring an account or a policy decision that is
-the owner's to make. None blocks the release; all of them are hardening.
+Everything in Phases 2–5 is done and v0.1.1 is released and validated. What is
+left needs an account or a policy call that is the owner's to make. None of it
+blocks the release; all of it is hardening.
 
 - **Codecov** (Phase 1, and the Phase 3 verification that depends on it).
   Enabling the repo and setting `CODECOV_TOKEN` needs a Codecov login. Until
@@ -806,15 +817,13 @@ the owner's to make. None blocks the release; all of them are hardening.
   preset schedules "before 6am on monday". Installing it needs GitHub app
   permissions. `renovate.json5` is already correct and validated, so the first
   run should need no follow-up.
-- **The `main` ruleset** (OQ-3), and the follow-up check that a PR cannot merge
-  past a failing required check. This one is deliberately left rather than
-  blocked: a ruleset changes how everyone merges, and naming a required check
-  wrong locks the repo against its owner. The check names are now settled and
-  proven across five PRs, so it is ready to create whenever the owner wants it —
-  require `Lint`, `Test Go`, `Build`, `Docker Build`, `Analyze Go (go)`,
-  `Security Scan`, `Secret Scan`, `Check Dependency Licenses`, `Check Required
-  Labels`, `Lint Markdown`, `Detect site`, `check`, `grype`, and exclude
-  `Build Starlight` until DESIGN-0002 lands.
+- **The `main` ruleset is active but partial.** It blocks deletion and
+  force-pushes — the two things that cannot be undone. It does not require
+  status checks or a PR before merge, so Phase 3's "required checks enforced, no
+  direct pushes" is met in spirit for the irreversible cases and not at all for
+  the reversible ones. That is a defensible place to stop for a one-maintainer
+  repo; it is recorded here so nobody later mistakes green CI on a PR for
+  something that was actually enforced.
 
 ## File Changes
 
