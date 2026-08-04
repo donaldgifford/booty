@@ -551,37 +551,37 @@ walkthrough, which must stay guide==code.
 
 #### Tasks (Phase 3b)
 
-- [ ] **API: one name for one concept.** `httpsrv.Options` and
+- [x] **API: one name for one concept.** `httpsrv.Options` and
       `proxydhcp.Config` name the same thing. Standardise on `Config` across
       `httpsrv`, `proxydhcp`, and `tftp`; `render` keeps `Option` because its
       functional options are a genuinely different thing.
-- [ ] **API: `tftp.New` takes a struct.** It is positional
+- [x] **API: `tftp.New` takes a struct.** It is positional
       (`New(bootDir, logger)`) while its three peers take a struct, so it is the
       one constructor that cannot gain a field without breaking callers — and
       OQ-8 needs it to gain one.
-- [ ] **API: split `proxydhcp.Serve`'s naked bool.** `Serve(ctx, conn, binl bool)`
+- [x] **API: split `proxydhcp.Serve`'s naked bool.** `Serve(ctx, conn, binl bool)`
       forces every call site to encode a protocol distinction as `true`.
       `ServeDHCP` / `ServeBINL` say which is which at the call site.
-- [ ] **API: `httpsrv.New` returns an error.** It silently accepts a `BaseURL`
+- [x] **API: `httpsrv.New` returns an error.** It silently accepts a `BaseURL`
       it cannot use. `cmd/booty` now validates its own `--url` flag, but a
       library that accepts unusable input and fails much later, in someone
       else's rack, is the wrong default for every other consumer.
-- [ ] **API: drop the `catalog.Source` interface.** One implementation, no
+- [x] **API: drop the `catalog.Source` interface.** One implementation, no
       in-repo use of the abstraction — exactly the speculative extension point
       CLAUDE.md forbids. Keep `DirSource`; the interface can come back when a
       second source exists.
-- [ ] **API: unexport `PortDHCP`/`PortBoot`/`PortBINL`.** The library's only
+- [x] **API: unexport `PortDHCP`/`PortBoot`/`PortBINL`.** The library's only
       exported constants, for values already expressed as address-string
       defaults in `cmd/booty`. `tftp` keeps port 69 unexported and is fine.
-- [ ] **TFTP: bound in-flight transfers.** 200 unanswered RRQs take the process
+- [x] **TFTP: bound in-flight transfers.** 200 unanswered RRQs take the process
       from 3 goroutines to 204, each pinning a socket for the full 20s retry
       budget — roughly 51 pkt/s to exhaust the fd table. A cap sheds load
       instead of falling over, with no new config surface.
-- [ ] **TFTP: require the first ACK before retransmitting.** The measured 121x
+- [x] **TFTP: require the first ACK before retransmitting.** The measured 121x
       amplification comes from blind-retransmitting DATA to a peer that has
       never spoken. A spoofed source address gets one datagram, not the whole
       retry budget.
-- [ ] Update `docs/go-ipxe/` for every signature change — the walkthrough is the
+- [x] Update `docs/go-ipxe/` for every signature change — the walkthrough is the
       code (ADR-0002), so a stale snippet is a broken build for anyone
       following it.
 

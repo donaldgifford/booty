@@ -33,7 +33,7 @@ func TestFanoutHoldsSocketsPerUnansweredRRQ(t *testing.T) {
 		t.Fatal(err)
 	}
 	const n = 200
-	rrq := buildRRQ("ipxe.efi", "octet", nil)
+	rrq := buildRRQ("ipxe.efi", nil)
 	start := time.Now()
 	for range n {
 		if _, err := cl.WriteTo(rrq, addr); err != nil {

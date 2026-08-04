@@ -41,13 +41,15 @@ func startServer(t *testing.T, bootDir string) string {
 	return conn.LocalAddr().String()
 }
 
-// buildRRQ constructs a read request: opcode, filename\0mode\0[opt\0val\0]...
-func buildRRQ(filename, mode string, opts map[string]string) []byte {
+// buildRRQ constructs a read request: opcode, filename\0octet\0[opt\0val\0]...
+// The mode is fixed because octet is the only one the server accepts; a test for
+// the rejection path builds its own packet rather than parameterising this.
+func buildRRQ(filename string, opts map[string]string) []byte {
 	var b bytes.Buffer
 	_ = binary.Write(&b, binary.BigEndian, uint16(opRRQ))
 	b.WriteString(filename)
 	b.WriteByte(0)
-	b.WriteString(mode)
+	b.WriteString("octet")
 	b.WriteByte(0)
 	for k, v := range opts {
 		b.WriteString(k)
@@ -83,7 +85,7 @@ func tftpGet(t *testing.T, serverAddr, filename string, opts map[string]string) 
 	}
 	defer func() { _ = cl.Close() }()
 
-	if _, err := cl.WriteTo(buildRRQ(filename, "octet", opts), raddr); err != nil {
+	if _, err := cl.WriteTo(buildRRQ(filename, opts), raddr); err != nil {
 		t.Fatalf("send RRQ: %v", err)
 	}
 
@@ -190,7 +192,7 @@ func TestServeDrainsInFlightTransfer(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	if _, err := client.WriteTo(buildRRQ("initrd.img", "octet", nil), conn.LocalAddr()); err != nil {
+	if _, err := client.WriteTo(buildRRQ("initrd.img", nil), conn.LocalAddr()); err != nil {
 		t.Fatalf("send RRQ: %v", err)
 	}
 
