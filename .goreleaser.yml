@@ -32,8 +32,15 @@ archives:
   - id: default
     name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     formats: ["tar.gz"]
+    # Apache-2.0 §4(a) requires that recipients of the work get a copy of the
+    # licence, and a downloaded tarball is exactly that — a recipient who never
+    # sees the repo. goreleaser's default is to include LICENSE/README, and the
+    # `none*` idiom that used to be here turned that off, shipping the bare
+    # binary. README.md comes along because a tarball with no orientation at all
+    # is unkind, and it is 8 kB.
     files:
-      - none*
+      - LICENSE
+      - README.md
 
 sboms:
   - id: archives
