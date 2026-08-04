@@ -3,13 +3,17 @@
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
-## [0.1.0] - 2026-08-04
+## [unreleased]
 
 ### Bug Fixes
 
-- *(release)* Ship LICENSE and README in the archives
+- *(changelog)* Stop attributing the release to the v0.0.0 baseline
 
-## [0.0.0] - 2026-08-04
+### Documentation
+
+- *(impl)* Record Phase 4 — v0.1.0 published and verified
+
+## [0.1.0] - 2026-08-04
 
 ### Features
 
@@ -26,6 +30,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(ci)* Gate the Starlight build on the site scaffold existing
 - *(cmd)* Reject a --url that machines cannot chain to
 - *(tftp)* Bound in-flight transfers and stop amplifying to silent peers
+- *(release)* Ship LICENSE and README in the archives
 
 ### Refactor
 
