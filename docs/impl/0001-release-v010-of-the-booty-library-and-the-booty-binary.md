@@ -37,6 +37,7 @@ created: 2026-07-29
     - [Success Criteria (Phase 3b)](#success-criteria-phase-3b)
   - [Phase 4: Cut v0.1.0](#phase-4-cut-v010)
     - [Tasks (Phase 4)](#tasks-phase-4)
+      - [Two findings from the pre-flight and verification](#two-findings-from-the-pre-flight-and-verification)
     - [Success Criteria (Phase 4)](#success-criteria-phase-4)
   - [Phase 5: Consumer-path validation](#phase-5-consumer-path-validation)
     - [Tasks (Phase 5)](#tasks-phase-5)
@@ -621,41 +622,63 @@ Label flow end-to-end, per DESIGN-0001 OQ-1: seed `v0.0.0`, release PR labeled
 
 #### Tasks (Phase 4)
 
-- [ ] Seed the baseline tag at the merge commit of the Phase 2/3 PR (OQ-4):
-      `git tag -a v0.0.0 -m "Baseline for pr-semver-bump; not a release" <merge-commit> && git push origin v0.0.0`
-      (no workflow fires on tag push — verified in `.github/workflows/`).
-- [ ] Pre-flight at the release commit: `just ci` and `just release-local` both
-      clean. **Cannot be checked off until that commit exists**, but everything
-      it depends on has been verified from this branch, so the step should be a
-      formality rather than a discovery: `just ci` completes (it needed the
-      `GOTOOLCHAIN` fix first), `just release-local` produces 4 archives + 4
-      SBOMs + `checksums.txt`, `goreleaser check` validates `.goreleaser.yml`
-      against the v2 schema, and the Go version agrees across all three places
-      it is pinned — `go.mod`, `mise.toml` and the `Dockerfile` builder stage
-      are all on 1.26.5. That last one is the CLAUDE.md gotcha that bites when
-      only `go.mod` gets bumped.
-- [ ] Open the release PR (a trivial docs/README touch is fine), label it
-      `minor`, merge it.
-- [ ] Watch `release.yml`: pr-semver-bump tags `v0.1.0` → goreleaser publishes
-      the GitHub release → docker job pushes GHCR.
-- [ ] Verify the release page: **4** archives (linux+darwin × amd64+arm64) each
-      with an `.spdx.json` SBOM — 10 assets total with `checksums.txt` +
-      `checksums.txt.sig` — and notes grouped by conventional-commit type.
-      (Corrected from "8 archives" on 2026-08-02: `.goreleaser.yml` declares
-      `goos: [linux, darwin] × goarch: [amd64, arm64]` and one tar.gz archive
-      per target, so 4. A `just release-local` snapshot emitted exactly
-      4 `.tar.gz` + 4 `.spdx.json` + `checksums.txt`; 8 was the archive+SBOM
-      file count, not the archive count.)
-- [ ] Verify the signature from a clean keyring:
-      `gpg --import docs/booty-release.pub.asc && gpg --verify checksums.txt.sig checksums.txt`.
-- [ ] Verify GHCR: tags `0.1.0`, `0.1`, `v0`, `latest`; OCI annotations render
-      on the package page; SBOM + provenance attestations attached
-      (`docker buildx imagetools inspect`).
-- [ ] Trigger pkg.go.dev indexing:
-      `GOPROXY=proxy.golang.org go list -m github.com/donaldgifford/booty@v0.1.0`;
-      confirm <https://pkg.go.dev/github.com/donaldgifford/booty> renders the
-      Phase 2 docs for all five packages.
-- [ ] Confirm the regenerated `CHANGELOG.md` on `main` includes `v0.1.0`.
+- [x] Seed the baseline tag at the merge commit of the Phase 2/3 PR (OQ-4).
+      Tagged `v0.0.0` at `71cbc9b`, the merge of [PR #2](https://github.com/donaldgifford/booty/pull/2).
+      Confirmed first that no workflow triggers on tag push: `changelog.yml` and
+      `release.yml` both mention `tags:`, but neither under `on.push`.
+- [x] Pre-flight at the release commit: `just ci` and `just release-local` both
+      clean. It was not quite a formality — see the archive-contents finding
+      below. `goreleaser check` validates, and Go 1.26.5 agrees across `go.mod`,
+      `mise.toml` and the Dockerfile.
+- [x] Open the release PR, label it `minor`, merge it.
+      [PR #3](https://github.com/donaldgifford/booty/pull/3): 13 checks pass,
+      merged as `89a1e3e`. Fewer checks than PR #2 because the Docs workflow is
+      path-filtered and this PR touched no docs.
+- [x] Watch `release.yml`: pr-semver-bump tagged `v0.1.0`, goreleaser published
+      the release, the docker job pushed GHCR. All green, including the GPG
+      signing step on its first real run.
+- [x] Verify the release page: 10 assets — 4 archives (linux+darwin ×
+      amd64+arm64), 4 `.spdx.json` SBOMs, `checksums.txt`, `checksums.txt.sig`.
+- [x] Verify the signature from a clean keyring. Done with an isolated
+      `GNUPGHOME` holding nothing but `docs/booty-release.pub.asc`: good
+      signature, fingerprint matches the README, and the archive checks out
+      against `checksums.txt`. The "not certified with a trusted signature"
+      warning is expected — that key is in no web of trust, which is exactly
+      why the README says to confirm the fingerprint out of band.
+- [x] Verify GHCR: tags `0.1.0`, `0.1`, `v0`, `latest` (plus `dev-ci` from PR
+      builds). The `v0.1.0` manifest is an OCI image index carrying
+      `linux/amd64`, `linux/arm64`, and two attestation manifests (SBOM +
+      provenance). Note the image tags are unprefixed (`0.1.0`) while the git
+      tag is `v0.1.0`; `docker pull ghcr.io/donaldgifford/booty:v0.1.0` will
+      not resolve.
+- [x] Trigger pkg.go.dev indexing. `go list -m github.com/donaldgifford/booty@v0.1.0`
+      against `proxy.golang.org` resolves, and the proxy lists both `v0.0.0`
+      and `v0.1.0`.
+- [x] Confirm the regenerated `CHANGELOG.md` on `main` includes `v0.1.0`. It
+      does — but see below, because what it contained was wrong.
+
+##### Two findings from the pre-flight and verification
+
+- **The archives shipped no licence.** `.goreleaser.yml` carried goreleaser's
+  `none*` idiom in `archives.files`, which disables its default of bundling
+  LICENSE and README — so every tarball would have held nothing but the binary.
+  booty is Apache-2.0, and §4(a) requires that recipients of the work receive a
+  copy of the licence; someone downloading a tarball is exactly that, a
+  recipient who may never see the repo. Fixed in the release PR itself, and
+  confirmed in the published artifact: each archive holds `LICENSE`,
+  `README.md`, `booty`.
+- **The release was attributed to the baseline tag.** This one only became
+  visible after publishing. Seeding `v0.0.0` at the merge commit (OQ-4) put an
+  ordinary-looking release boundary _after_ all the substantive work, so
+  git-cliff filed the entire pre-release audit, the API settling, the TFTP
+  hardening and the performance fix under a version nobody can install — and
+  both `CHANGELOG.md` and the GitHub release page presented v0.1.0 as shipping
+  one packaging fix. OQ-4's choice was reasonable for pr-semver-bump's sake;
+  this consequence simply was not anticipated. Fixed with `ignore_tags` in
+  `cliff.toml` (`skip_tags` was tried first and is wrong — it discards the
+  commits instead of reattributing them), and the published release notes were
+  rewritten by hand, since goreleaser's are generated once at publish time. The
+  tag itself was left where it is.
 
 #### Success Criteria (Phase 4)
 
