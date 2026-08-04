@@ -195,7 +195,7 @@ func (s *Server) handleDHCP(conn net.PacketConn, raw []byte, _ net.Addr) {
 	if err != nil || req.op != opBOOTREQUEST || !req.isPXE || req.msgType != msgDISCOVER {
 		return // leave ordinary DHCP traffic to the real server
 	}
-	dst := &net.UDPAddr{IP: net.IPv4bcast, Port: PortBoot}
+	dst := &net.UDPAddr{IP: net.IPv4bcast, Port: portBoot}
 	conn.WriteTo(s.buildProxyOffer(req), dst)
 }
 ```

@@ -245,7 +245,7 @@ func TestBootFileByArch(t *testing.T) {
 	}
 }
 
-// TestServeReturnsOnContextCancel pins the exported Serve seam to the same
+// TestServeReturnsOnContextCancel pins the exported ServeDHCP seam to the same
 // contract tftp.Serve honours: cancelling ctx makes it return. The ctx-to-Close
 // goroutine used to live only in ListenAndServe, so an external consumer calling
 // Serve directly — the seam the doc comment advertises — leaked a goroutine
@@ -260,7 +260,7 @@ func TestServeReturnsOnContextCancel(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- s.Serve(ctx, conn, false) }()
+	go func() { done <- s.ServeDHCP(ctx, conn) }()
 
 	cancel()
 	select {
@@ -299,7 +299,7 @@ func TestHandleDHCPStaysSilent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			conn := &captureConn{}
-			s.handleDHCP(conn, tt.raw, &net.UDPAddr{IP: net.IPv4(10, 0, 0, 5), Port: PortBoot})
+			s.handleDHCP(conn, tt.raw, &net.UDPAddr{IP: net.IPv4(10, 0, 0, 5), Port: portBoot})
 			if len(conn.sent) != 0 {
 				t.Fatalf("sent %d packet(s); handleDHCP must stay silent", len(conn.sent))
 			}
@@ -315,7 +315,7 @@ func TestHandleDHCPBroadcastsOffer(t *testing.T) {
 	conn := &captureConn{}
 
 	s.handleDHCP(conn, craftRequest(msgDISCOVER, 0x0007, true, nil),
-		&net.UDPAddr{IP: net.IPv4zero, Port: PortBoot})
+		&net.UDPAddr{IP: net.IPv4zero, Port: portBoot})
 
 	if len(conn.sent) != 1 {
 		t.Fatalf("sent %d packets, want exactly 1 offer", len(conn.sent))
@@ -327,8 +327,8 @@ func TestHandleDHCPBroadcastsOffer(t *testing.T) {
 	if !dst.IP.Equal(net.IPv4bcast) {
 		t.Errorf("offer went to %v, want the broadcast address", dst.IP)
 	}
-	if dst.Port != PortBoot {
-		t.Errorf("offer went to port %d, want %d (client port)", dst.Port, PortBoot)
+	if dst.Port != portBoot {
+		t.Errorf("offer went to port %d, want %d (client port)", dst.Port, portBoot)
 	}
 
 	reply := conn.sent[0].payload
@@ -356,7 +356,7 @@ func TestHandleDHCPUnicastsToRelay(t *testing.T) {
 	relay := net.IPv4(10, 20, 30, 1)
 	copy(raw[24:28], relay.To4()) // giaddr
 
-	s.handleDHCP(conn, raw, &net.UDPAddr{IP: relay, Port: PortDHCP})
+	s.handleDHCP(conn, raw, &net.UDPAddr{IP: relay, Port: portDHCP})
 
 	if len(conn.sent) != 1 {
 		t.Fatalf("sent %d packets, want exactly 1 offer", len(conn.sent))
@@ -368,8 +368,8 @@ func TestHandleDHCPUnicastsToRelay(t *testing.T) {
 	if !dst.IP.Equal(relay) {
 		t.Errorf("offer went to %v, want the relay at %v", dst.IP, relay)
 	}
-	if dst.Port != PortDHCP {
-		t.Errorf("offer went to port %d, want %d (relay listens on the server port)", dst.Port, PortDHCP)
+	if dst.Port != portDHCP {
+		t.Errorf("offer went to port %d, want %d (relay listens on the server port)", dst.Port, portDHCP)
 	}
 }
 
@@ -392,7 +392,7 @@ func TestRoundTripDiscoverToBoot(t *testing.T) {
 	}
 }
 
-// TestServeBINLSocket drives the Serve seam over a real UDP socket: a Boot Server
+// TestServeBINLSocket drives the ServeBINL seam over a real UDP socket: a Boot Server
 // Request goes in, a Boot Server ACK naming ipxe.efi comes back to the sender.
 // The BINL reply is unicast, so this needs no broadcast privilege.
 func TestServeBINLSocket(t *testing.T) {
@@ -406,7 +406,7 @@ func TestServeBINLSocket(t *testing.T) {
 
 	// t.Context() is cancelled at test end; the deferred srv.Close() also unblocks
 	// Serve's ReadFrom, so the goroutine never leaks.
-	go func() { _ = s.Serve(t.Context(), srv, true) }()
+	go func() { _ = s.ServeBINL(t.Context(), srv) }()
 
 	client, err := net.ListenPacket("udp4", "127.0.0.1:0")
 	if err != nil {

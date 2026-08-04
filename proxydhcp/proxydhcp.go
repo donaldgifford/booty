@@ -11,11 +11,13 @@ import (
 	"syscall"
 )
 
-// UDP ports in the exchange.
+// UDP ports in the exchange. Unexported: they are protocol facts, not knobs,
+// and a consumer choosing a listen address passes an address string to
+// ListenAndServe rather than reaching for a constant.
 const (
-	PortDHCP = 67   // proxy OFFER is sent here (client broadcast destination)
-	PortBoot = 68   // client listens here for replies
-	PortBINL = 4011 // Boot Server Request/ACK (BINL) port
+	portDHCP = 67   // proxy OFFER is sent here (client broadcast destination)
+	portBoot = 68   // client listens here for replies
+	portBINL = 4011 // Boot Server Request/ACK (BINL) port
 )
 
 // BOOTP op codes and DHCP message types (RFC 2131 §2, §3).
@@ -152,18 +154,31 @@ func (s *Server) ListenAndServe(ctx context.Context, dhcpAddr, binlAddr string) 
 	return err
 }
 
-// Serve reads packets off conn and dispatches each to handle until ctx is done.
-// It is the testable seam: a caller can pass any net.PacketConn.
-func (s *Server) Serve(ctx context.Context, conn net.PacketConn, binl bool) error {
-	if binl {
-		return s.serve(ctx, conn, s.handleBINL)
-	}
+// ServeDHCP answers phase-1 PXE traffic on conn until ctx is done: a broadcast
+// DHCPDISCOVER tagged PXEClient gets a proxy OFFER that steers the client to
+// booty without offering it an address. Anything else is ignored, so the real
+// DHCP server keeps owning leases.
+//
+// It is one of the two testable seams (with [Server.ServeBINL]): a caller can
+// pass any net.PacketConn, which is what lets tests bind 127.0.0.1:0 instead of
+// the privileged broadcast socket [Server.ListenAndServe] needs.
+func (s *Server) ServeDHCP(ctx context.Context, conn net.PacketConn) error {
 	return s.serve(ctx, conn, s.handleDHCP)
+}
+
+// ServeBINL answers phase-2 PXE traffic on conn until ctx is done: a unicast
+// Boot Server Request gets an ACK naming the arch-appropriate iPXE binary.
+//
+// This is a separate method rather than a bool argument because the two phases
+// are different protocols on different ports, and `Serve(ctx, conn, true)` at a
+// call site says nothing about which one it means.
+func (s *Server) ServeBINL(ctx context.Context, conn net.PacketConn) error {
+	return s.serve(ctx, conn, s.handleBINL)
 }
 
 func (*Server) serve(ctx context.Context, conn net.PacketConn, handle func(net.PacketConn, []byte, net.Addr)) error {
 	// Cancelling ctx closes conn, which unblocks the ReadFrom below. This lives
-	// here rather than in ListenAndServe so that the exported Serve seam honours
+	// here rather than in ListenAndServe so that the exported ServeDHCP/ServeBINL seams honour
 	// ctx too: a consumer driving Serve directly would otherwise block in
 	// ReadFrom for the life of the process.
 	go func() {
@@ -204,9 +219,9 @@ func (s *Server) handleDHCP(conn net.PacketConn, raw []byte, _ net.Addr) {
 
 	reply := s.buildProxyOffer(req)
 	// The client has no IP yet: broadcast to 255.255.255.255:68 (or the relay).
-	dst := &net.UDPAddr{IP: net.IPv4bcast, Port: PortBoot}
+	dst := &net.UDPAddr{IP: net.IPv4bcast, Port: portBoot}
 	if req.giaddr != nil && !req.giaddr.Equal(net.IPv4zero) {
-		dst = &net.UDPAddr{IP: req.giaddr, Port: PortDHCP}
+		dst = &net.UDPAddr{IP: req.giaddr, Port: portDHCP}
 	}
 	if _, err := conn.WriteTo(reply, dst); err != nil {
 		s.logger.Error("proxyDHCP offer send failed", "mac", req.mac, "err", err)
