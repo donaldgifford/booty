@@ -31,7 +31,7 @@ v0 semver: the API may still move.
 
 | Package      | What it does                                                                                                    |
 | ------------ | --------------------------------------------------------------------------------------------------------------- |
-| `catalog/`   | Identity → group → profile matching, authored in HCL (variables, expressions, functions) via a `Source` seam    |
+| `catalog/`   | Identity → group → profile matching, authored in HCL (variables, expressions, functions) via `DirSource`                 |
 | `render/`    | `text/template` pipeline for every output: iPXE scripts, Talos machineconfig, cloud-init, Proxmox `answer.toml` |
 | `httpsrv/`   | Stdlib-only HTTP serving core: boot scripts, boot assets, and all config endpoints, dependency-gated routing    |
 | `tftp/`      | Read-only TFTP server from raw UDP (RFC 1350 + blksize/tsize/timeout negotiation, traversal guard)              |

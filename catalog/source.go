@@ -17,13 +17,15 @@ import (
 	"github.com/zclconf/go-cty/cty/function/stdlib"
 )
 
-// Source loads a Catalog. Implementations vary by where desired state lives:
-// DirSource reads HCL from a directory now; git:// and platform:// sources come
-// later (PLAN-0001). The interface is the seam that keeps those swappable.
-type Source interface {
-	Load(ctx context.Context) (*Catalog, error)
-	String() string
-}
+// There is deliberately no Source interface here. DirSource was its only
+// implementation and nothing in this module ever accepted one, so it declared a
+// seam that no code crossed.
+//
+// It costs a future git:// or platform:// source (PLAN-0001) nothing, because
+// Go interfaces are satisfied implicitly: a consumer that wants to swap sources
+// declares the one-method interface it needs in its own package, and DirSource
+// already satisfies it. That is also where the interface belongs — an interface
+// describes what a caller requires, and only the caller knows that.
 
 // Errors [DirSource.Load] reports for a catalog root it cannot use. They are
 // distinct because a consumer may reasonably treat them differently — an

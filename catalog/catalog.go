@@ -8,7 +8,7 @@ import (
 )
 
 // Catalog is a loaded, validated set of profiles and groups. Construct it via a
-// Source; do not build one field-by-field outside tests.
+// [DirSource]; do not build one field-by-field outside tests.
 type Catalog struct {
 	Profiles map[string]Profile
 	Groups   []Group

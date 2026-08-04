@@ -25,7 +25,7 @@ reference consumer, the `booty` binary (ADR-0002):
 
 ```text
 cmd/booty/    # reference consumer — keep thin, parse flags + call the library
-catalog/                # identity→group→profile model, matcher, HCL Source
+catalog/                # identity→group→profile model, matcher, HCL DirSource
 render/                 # text/template pipeline (iPXE, Talos, cloud-init, Proxmox)
 httpsrv/                # stdlib HTTP serving core (boot + config endpoints)
 tftp/                   # read-only TFTP server (RFC 1350 + options)

@@ -1,7 +1,7 @@
 // Package catalog is booty's desired-state model for network boot.
 //
 // A catalog is a set of boot profiles plus the group rules that match a
-// booting machine to one of them. It is fed by a [Source] — a directory of
+// booting machine to one of them. It is fed by a [DirSource] — a directory of
 // HCL files today — and answers one question at request time: this machine
 // has these identity attributes, so which profile and which variables apply
 // to it?
@@ -11,7 +11,7 @@
 // is the part of matchbox worth keeping.
 //
 // The domain types here carry no HCL or cty types. All HCL decoding and
-// expression evaluation is quarantined in the [Source] implementation, so the
+// expression evaluation is quarantined in [DirSource], so the
 // config language never leaks into the matcher or the renderers.
 //
 // # Usage
