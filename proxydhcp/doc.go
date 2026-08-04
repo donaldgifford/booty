@@ -25,6 +25,27 @@
 // buildBootAck builders) that are unit tested byte-for-byte against the spec,
 // since real-firmware interop is exercised by the QEMU tier of the e2e harness.
 //
+// # Usage
+//
+//	srv, err := proxydhcp.New(proxydhcp.Config{ServerIP: "192.168.1.10"})
+//	if err != nil {
+//		return err // ServerIP must be a routable IPv4 the client can reach
+//	}
+//	if err := srv.ListenAndServe(ctx, ":67", ":4011"); err != nil {
+//		return err
+//	}
+//
+// Both ports are privileged, and the :67 socket needs SO_BROADCAST — a client
+// with no address yet can only be reached by broadcast, and Go does not set
+// that flag by default. ListenAndServe handles it; a caller binding its own
+// sockets and driving [Server.ServeDHCP] / [Server.ServeBINL] must do it
+// itself, or the reply fails with EACCES.
+//
+// Running this at all means answering DHCPDISCOVER on a network someone else's
+// DHCP server owns. booty never offers an address — it only steers PXE clients
+// — but a second responder on the segment is still an operational decision, not
+// a default. That is why cmd/booty gates it behind --proxydhcp.
+//
 // Wire-level walkthrough:
 // https://github.com/donaldgifford/booty/blob/main/docs/go-ipxe/02-dhcp-and-pxe.md
 package proxydhcp

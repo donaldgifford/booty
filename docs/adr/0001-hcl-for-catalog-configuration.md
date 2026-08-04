@@ -47,11 +47,19 @@ Scope is bounded deliberately:
   machineconfig (YAML), Proxmox `answer.toml` (TOML), cloud-init user-data (YAML),
   iPXE scripts (their own text). A useful consequence is that booty needs **no
   YAML or TOML emitter dependency** — HCL is the only config-format dependency.
-- **Owned interface (P3).** The `catalog.Source` interface returns plain domain
-  types (`Catalog`, `Profile`, `Group`, `Identity`). No `hcl` or `cty` type
-  appears in any exported catalog API or crosses into the matcher/renderer;
-  `catalog/catalog.go` imports neither package. `DirSource` is one
-  implementation; `git://` and `platform://` sources will be others.
+- **Owned boundary (P3).** Loading returns plain domain types (`Catalog`,
+  `Profile`, `Group`, `Identity`). No `hcl` or `cty` type appears in any exported
+  catalog API or crosses into the matcher/renderer; `catalog/catalog.go` imports
+  neither package. `DirSource` is one loader; `git://` and `platform://` sources
+  will be others.
+
+  > **Note (2026-08-03, IMPL-0001 Phase 3b):** this originally described a
+  > `catalog.Source` interface, which was removed before v0.1.0 — it had one
+  > implementation and nothing in the module accepted one. The decision it
+  > records is unaffected: what mattered was that HCL types never cross the
+  > boundary, not that the boundary was spelled as an interface. Go satisfies
+  > interfaces implicitly, so a consumer that wants to swap loaders declares the
+  > interface it needs in its own package and `DirSource` already satisfies it.
 
 ## Consequences
 
