@@ -8,6 +8,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Bug Fixes
 
 - *(changelog)* Stop attributing the release to the v0.0.0 baseline
+- *(cmd)* Report a real version for go-installed and local builds
+- *(ci)* Pass version build args to the release image bake
 
 ### Documentation
 
