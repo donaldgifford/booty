@@ -79,3 +79,44 @@ func TestParseServeFlagsBinds(t *testing.T) {
 		t.Error("--proxydhcp = false after being set")
 	}
 }
+
+// buildMetadata exists because `go install ...@v0.1.0` never runs goreleaser's
+// ldflags, so a binary the user installed *by version number* reported itself
+// as "dev". These cover the decision logic; the end-to-end proof is a real
+// `go install` in a clean container, recorded in IMPL-0001 Phase 5.
+func TestBuildMetadataPrefersLdflags(t *testing.T) {
+	// Values injected at release time must win over anything embedded, because
+	// they are the release's own idea of what it is.
+	oldV, oldC, oldD := version, commit, date
+	t.Cleanup(func() { version, commit, date = oldV, oldC, oldD })
+
+	version, commit, date = "1.2.3", "abc1234", "2026-01-01T00:00:00Z"
+	v, c, d := buildMetadata()
+	if v != "1.2.3" || c != "abc1234" || d != "2026-01-01T00:00:00Z" {
+		t.Errorf("buildMetadata() = %q/%q/%q, want the ldflags values unchanged", v, c, d)
+	}
+}
+
+// Under `go test` the main module's version is "(devel)", so this pins the
+// fallback's floor: it must not replace "dev" with a placeholder that says just
+// as little. The VCS stamps, by contrast, are real here — the test binary is
+// built from a checkout — so commit and date should improve on their defaults.
+func TestBuildMetadataFallback(t *testing.T) {
+	oldV, oldC, oldD := version, commit, date
+	t.Cleanup(func() { version, commit, date = oldV, oldC, oldD })
+
+	version, commit, date = unknownVersion, unknownCommit, unknownDate
+	v, c, d := buildMetadata()
+
+	if v == "(devel)" {
+		t.Error(`version = "(devel)"; Go's placeholder is no more useful than "dev" and must not be substituted in`)
+	}
+	if c == unknownCommit && d == unknownDate {
+		t.Log("no VCS stamps in this build; nothing to fall back to")
+		return
+	}
+	if c != unknownCommit && len(c) < 7 {
+		t.Errorf("commit = %q, which is too short to be a revision", c)
+	}
+	t.Logf("fallback resolved commit=%q date=%q", c, d)
+}

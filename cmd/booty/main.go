@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"sync"
 	"syscall"
 
@@ -23,12 +24,55 @@ import (
 	"github.com/donaldgifford/booty/tftp"
 )
 
-// Build metadata, injected via -ldflags at release time (see CLAUDE.md).
-var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
+// Sentinels for "-ldflags did not set this". buildMetadata compares against
+// them to decide whether the embedded build info is an improvement.
+const (
+	unknownVersion = "dev"
+	unknownCommit  = "none"
+	unknownDate    = "unknown"
 )
+
+// Build metadata, injected via -ldflags at release time (see CLAUDE.md). These
+// are the values a plain `go build` leaves behind; buildMetadata fills them in
+// from the binary's own build info when that happens.
+var (
+	version = unknownVersion
+	commit  = unknownCommit
+	date    = unknownDate
+)
+
+// buildMetadata resolves the build strings, preferring -ldflags and falling
+// back to what the toolchain embedded in the binary.
+//
+// The fallback is not a nicety. `go install github.com/donaldgifford/booty/cmd/booty@v0.1.0`
+// is a documented install path and never runs goreleaser, so `booty version`
+// reported "dev (commit none, built unknown)" for a binary the user had just
+// installed by version number — the one situation where they had already said
+// which version they wanted. Go records the module version in the build info
+// for precisely this case, and records VCS stamps when building from a
+// checkout, so both paths can answer honestly.
+//
+// "(devel)" is Go's placeholder for a build that has no module version, which
+// is no more informative than "dev" and is left alone.
+func buildMetadata() (v, c, d string) {
+	v, c, d = version, commit, date
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return v, c, d
+	}
+	if v == unknownVersion && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		v = info.Main.Version
+	}
+	for _, s := range info.Settings {
+		switch {
+		case s.Key == "vcs.revision" && c == unknownCommit:
+			c = s.Value
+		case s.Key == "vcs.time" && d == unknownDate:
+			d = s.Value
+		}
+	}
+	return v, c, d
+}
 
 func main() {
 	os.Exit(run(os.Args))
@@ -45,7 +89,8 @@ func run(args []string) int {
 	case "validate":
 		return cmdValidate(args[2:])
 	case "version", "--version", "-v":
-		fmt.Printf("booty %s (commit %s, built %s)\n", version, commit, date)
+		v, c, d := buildMetadata()
+		fmt.Printf("booty %s (commit %s, built %s)\n", v, c, d)
 		return 0
 	case "help", "-h", "--help":
 		usage(os.Stdout)
@@ -187,8 +232,9 @@ func cmdServe(args []string) int {
 		return 1
 	}
 
+	v, _, _ := buildMetadata()
 	logger.Info("booty starting",
-		"version", version,
+		"version", v,
 		"http_addr", c.httpAddr,
 		"tftp_addr", c.tftpAddr,
 		"boot_dir", c.bootDir,
