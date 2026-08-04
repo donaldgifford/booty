@@ -31,7 +31,7 @@ func startServer(t *testing.T, bootDir string) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		_ = New(bootDir, quietLogger()).Serve(ctx, conn)
+		_ = New(Config{BootDir: bootDir, Logger: quietLogger()}).Serve(ctx, conn)
 		close(done)
 	}()
 	t.Cleanup(func() {
@@ -41,13 +41,15 @@ func startServer(t *testing.T, bootDir string) string {
 	return conn.LocalAddr().String()
 }
 
-// buildRRQ constructs a read request: opcode, filename\0mode\0[opt\0val\0]...
-func buildRRQ(filename, mode string, opts map[string]string) []byte {
+// buildRRQ constructs a read request: opcode, filename\0octet\0[opt\0val\0]...
+// The mode is fixed because octet is the only one the server accepts; a test for
+// the rejection path builds its own packet rather than parameterising this.
+func buildRRQ(filename string, opts map[string]string) []byte {
 	var b bytes.Buffer
 	_ = binary.Write(&b, binary.BigEndian, uint16(opRRQ))
 	b.WriteString(filename)
 	b.WriteByte(0)
-	b.WriteString(mode)
+	b.WriteString("octet")
 	b.WriteByte(0)
 	for k, v := range opts {
 		b.WriteString(k)
@@ -83,7 +85,7 @@ func tftpGet(t *testing.T, serverAddr, filename string, opts map[string]string) 
 	}
 	defer func() { _ = cl.Close() }()
 
-	if _, err := cl.WriteTo(buildRRQ(filename, "octet", opts), raddr); err != nil {
+	if _, err := cl.WriteTo(buildRRQ(filename, opts), raddr); err != nil {
 		t.Fatalf("send RRQ: %v", err)
 	}
 
@@ -160,6 +162,94 @@ func payload(n int) []byte {
 		b[i] = byte((i*31 + 7) % 251)
 	}
 	return b
+}
+
+// TestServeDrainsInFlightTransfer pins the shutdown guarantee the guide makes in
+// docs/go-ipxe/07-forge-complete.md: cancelling ctx stops the server accepting
+// new requests, but a transfer already running finishes. The failure this
+// prevents is a machine booting from a truncated initrd because someone
+// restarted booty mid-fetch.
+func TestServeDrainsInFlightTransfer(t *testing.T) {
+	bootDir := t.TempDir()
+	want := payload(4 * defaultBlockSize) // several blocks, so we can cancel mid-flight
+	writeBootFile(t, bootDir, "initrd.img", want)
+
+	conn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("bind server: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	served := make(chan struct{})
+	go func() {
+		_ = New(Config{BootDir: bootDir, Logger: quietLogger()}).Serve(ctx, conn)
+		close(served)
+	}()
+
+	client, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("bind client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	if _, err := client.WriteTo(buildRRQ("initrd.img", nil), conn.LocalAddr()); err != nil {
+		t.Fatalf("send RRQ: %v", err)
+	}
+
+	// Read the first block, which arrives from the transfer's own TID.
+	buf := make([]byte, 1024)
+	_ = client.SetReadDeadline(time.Now().Add(5 * time.Second))
+	n, tid, err := client.ReadFrom(buf)
+	if err != nil {
+		t.Fatalf("read first block: %v", err)
+	}
+	if op := binary.BigEndian.Uint16(buf[:2]); op != opDATA {
+		t.Fatalf("first reply opcode = %d, want DATA", op)
+	}
+	block := binary.BigEndian.Uint16(buf[2:4])
+	got := append([]byte(nil), buf[4:n]...)
+	blockLen := n - 4
+
+	// Shut the server down with the transfer only partly delivered.
+	cancel()
+	select {
+	case <-served:
+		t.Fatal("Serve returned while a transfer was still in flight")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	// The rest of the file must still arrive on the transfer's socket.
+	for {
+		ack := make([]byte, 4)
+		binary.BigEndian.PutUint16(ack[0:2], opACK)
+		binary.BigEndian.PutUint16(ack[2:4], block)
+		if _, err := client.WriteTo(ack, tid); err != nil {
+			t.Fatalf("ack block %d: %v", block, err)
+		}
+		if blockLen < defaultBlockSize {
+			break // a short block ends the transfer
+		}
+		_ = client.SetReadDeadline(time.Now().Add(5 * time.Second))
+		n, _, err = client.ReadFrom(buf)
+		if err != nil {
+			t.Fatalf("read block after shutdown: %v", err)
+		}
+		if op := binary.BigEndian.Uint16(buf[:2]); op != opDATA {
+			t.Fatalf("opcode = %d, want DATA", op)
+		}
+		block = binary.BigEndian.Uint16(buf[2:4])
+		got = append(got, buf[4:n]...)
+		blockLen = n - 4
+	}
+
+	if !bytes.Equal(got, want) {
+		t.Fatalf("drained transfer delivered %d bytes, want %d (truncated)", len(got), len(want))
+	}
+	select {
+	case <-served:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not return once the transfer drained")
+	}
 }
 
 func TestTransferSizes(t *testing.T) {
@@ -324,7 +414,7 @@ func TestParseRRQ(t *testing.T) {
 
 func TestResolvePathTraversal(t *testing.T) {
 	dir := t.TempDir()
-	s := New(dir, quietLogger())
+	s := New(Config{BootDir: dir, Logger: quietLogger()})
 	abs, _ := filepath.Abs(dir)
 
 	tests := []struct {
@@ -373,4 +463,42 @@ func hasPrefix(s, prefix string) bool {
 
 func asTFTP(err error, target **tftpError) bool {
 	return errors.As(err, target)
+}
+
+// TestOACKTimeoutValidated pins RFC 2349's 1-255 bound on the timeout option.
+// The value used to be echoed back verbatim, which reflected arbitrary bytes to
+// a source address TFTP cannot verify. Out-of-range values are left out of the
+// OACK entirely, which RFC 2347 defines as refusing the option.
+func TestOACKTimeoutValidated(t *testing.T) {
+	tests := []struct {
+		name    string
+		request string
+		want    string // "" means the option must be absent
+	}{
+		{"in range", "5", "5"},
+		{"lower bound", "1", "1"},
+		{"upper bound", "255", "255"},
+		{"zero is out of range", "0", ""},
+		{"above the bound", "256", ""},
+		{"negative", "-1", ""},
+		{"not a number", "abc", ""},
+		{"injected bytes", "\x01\x02INJECT-9999999999", ""},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oack := buildOACK(map[string]string{"timeout": tt.request}, defaultBlockSize, 1024)
+			opts := parseOACKOpts(oack[2:])
+			got, present := opts["timeout"]
+			if tt.want == "" {
+				if present {
+					t.Errorf("timeout=%q was acknowledged as %q; want the option refused", tt.request, got)
+				}
+				return
+			}
+			if !present || got != tt.want {
+				t.Errorf("timeout=%q acknowledged as %q (present=%v), want %q", tt.request, got, present, tt.want)
+			}
+		})
+	}
 }

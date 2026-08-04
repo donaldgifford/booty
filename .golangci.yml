@@ -265,24 +265,34 @@ linters:
           - gosec
         text: "G306:"
 
-      # httpsrv responses are boot scripts and machine configs consumed by
-      # firmware/installers (text/plain, yaml, toml) — never browser HTML, so
-      # the XSS taint analysis does not apply.
+      # G705 flags request data reaching a response body. httpsrv serves boot
+      # scripts and machine configs to firmware and installers (text/plain,
+      # yaml, toml), never browser HTML, so the XSS reading does not apply.
+      #
+      # The reading that DOES apply is template injection: these documents are
+      # rendered by text/template, which escapes nothing, so a newline in an
+      # identity field can append keys the operator never authored. That is a
+      # real defect and gosec was right to point at these sinks — this
+      # exclusion previously dismissed it on XSS grounds alone. It is handled
+      # at the boundary instead: validateIdentity (httpsrv/httpsrv.go) rejects
+      # control characters from every identity source before anything renders.
+      # If that guard is removed, re-enable this rule rather than trusting the
+      # exclusion.
       - linters:
           - gosec
         text: "G705:"
         path: httpsrv/
 
-      # CLI tool reads user-specified file paths by design.
+      # G304 (file read via a variable path) fires on the boot-asset readers in
+      # tftp/ and httpsrv/. Both resolve the request under bootDir with a
+      # lexical guard; neither resolves symlinks, so a symlink planted inside
+      # the boot directory escapes it. That is the accepted position — the boot
+      # directory is operator-curated — and it is stated in
+      # docs/go-ipxe/03-tftp-from-scratch.md. Revisit if booty ever serves a
+      # directory it does not control.
       - linters:
           - gosec
         text: "G304:"
-
-      # CLI color output to stdout; errors are not actionable.
-      - linters:
-          - gosec
-        text: "G104:"
-        path: cmd/(compare|diff)\.go$
 
     paths:
       - vendor

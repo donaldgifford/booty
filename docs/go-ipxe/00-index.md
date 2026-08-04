@@ -80,7 +80,7 @@ You need to know Go basics — goroutines, interfaces, error handling. The guide
 
 Read this diagram carefully. Every chapter implements one box or one arrow.
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                     Physical Server (powering on)                         │
 │                                                                            │

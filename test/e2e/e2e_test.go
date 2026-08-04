@@ -152,9 +152,13 @@ func startBooty(t *testing.T, bootDir, httpAddr, tftpAddr string) *booty {
 	}
 
 	rec := &recorder{}
-	handler := rec.wrap(httpsrv.New(httpsrv.Options{
+	bootSrv, err := httpsrv.New(httpsrv.Config{
 		Logger: logger, Catalog: cat, Renderer: renderer, BootDir: bootDir,
-	}).Handler())
+	})
+	if err != nil {
+		t.Fatalf("httpsrv.New: %v", err)
+	}
+	handler := rec.wrap(bootSrv.Handler())
 
 	// HTTP: our own listener so we can wrap the handler and learn the real port.
 	ln, err := net.Listen("tcp", httpAddr)
@@ -170,7 +174,7 @@ func startBooty(t *testing.T, bootDir, httpAddr, tftpAddr string) *booty {
 		t.Fatalf("tftp listen %s: %v", tftpAddr, err)
 	}
 	tctx, tcancel := context.WithCancel(context.Background())
-	go func() { _ = tftp.New(bootDir, logger).Serve(tctx, pc) }()
+	go func() { _ = tftp.New(tftp.Config{BootDir: bootDir, Logger: logger}).Serve(tctx, pc) }()
 
 	t.Cleanup(func() {
 		sctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

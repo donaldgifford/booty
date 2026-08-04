@@ -36,7 +36,7 @@ The separation matters: one profile (`talos-worker`) is shared by many machines,
 and each machine reaches it through a group. You maintain one recipe, not one per
 node.
 
-```
+```text
   iPXE request                Catalog
  ┌──────────────┐        ┌──────────────────────────┐
  │ mac=d0:50:.. │        │ group "cp-01"            │
@@ -122,8 +122,8 @@ repeating here:
    cloud-init, iPXE scripts — are dictated by their consumers and produced by
    `text/template` in Chapter 6, *not* by HCL. A happy consequence: `booty` needs
    no YAML or TOML emitter library.
-2. **HCL types never leak.** `catalog.go` imports neither `hcl` nor `cty`; the
-   `Source` interface returns plain `Catalog`/`Profile`/`Group` values. All the
+2. **HCL types never leak.** `catalog.go` imports neither `hcl` nor `cty`;
+   `DirSource.Load` returns plain `Catalog`/`Profile`/`Group` values. All the
    third-party machinery is quarantined in `source.go`. That's PLAN-0001's P3, and
    it's what will let a `git://` or `platform://` source slot in later without
    touching the matcher.
@@ -218,24 +218,47 @@ var macBareFunc = function.New(&function.Spec{
 
 This is a config language, not a runtime — the small surface is the point.
 
-## The Source interface
+## DirSource, and the interface that isn't here
 
 `DirSource` globs `*.hcl` in a directory, parses them in sorted order, and merges
 them into one body (so splitting variables/profiles/groups across files is purely
 organizational — `TestLoadMultipleFilesMerge` proves a variable in one file and a
-group in another resolve together). It sits behind an interface:
+group in another resolve together):
 
 ```go
-type Source interface {
-	Load(ctx context.Context) (*Catalog, error)
-	String() string
+type DirSource struct{ Root string }
+
+func (s DirSource) Load(ctx context.Context) (*Catalog, error)
+func (s DirSource) String() string
+```
+
+That `ctx` isn't used by the local dir loader beyond a cancellation check, but
+it's in the signature because the *next* sources — a `git://` clone loop, a
+`platform://` API poll — will need it (PLAN-0001's source-loop roadmap).
+
+This package used to export a `Source` interface with `DirSource` as its only
+implementation, and nothing in the module ever accepted one. That is worth
+dwelling on, because "define the interface now so the implementations are
+swappable later" is an instinct carried in from languages where it's necessary,
+and in Go it isn't. Interfaces are satisfied **implicitly**: nothing declares
+that it implements anything. So a consumer that wants to swap sources writes
+the interface it needs, in its own package —
+
+```go
+// in the platform's package, not booty's
+type catalogSource interface {
+	Load(ctx context.Context) (*catalog.Catalog, error)
 }
 ```
 
-That `ctx` isn't used by the local dir loader beyond a cancellation check, but it's
-in the signature because the *next* sources — a `git://` clone loop, a
-`platform://` API poll — will need it. Designing the seam now is what makes those
-additive later (PLAN-0001's source-loop roadmap).
+— and `catalog.DirSource` satisfies it with no change to booty at all. The
+interface ends up describing what the **caller** requires, which is the only
+place that information actually lives. An interface exported next to its single
+implementation describes nothing; it just makes the package's surface bigger and
+commits you to a method set before anyone has asked for one.
+
+The general form: accept interfaces, return structs — and let the accepter
+declare them.
 
 ## Try it yourself
 

@@ -92,87 +92,138 @@ func cmdValidate(args []string) int {
 	return 0
 }
 
-func cmdServe(args []string) int {
+// serveConfig is the parsed --serve flag set. It exists so cmdServe reads as
+// wiring rather than as a wall of flag declarations, and so the flags can be
+// validated in one place before anything binds a port.
+type serveConfig struct {
+	httpAddr          string
+	tftpAddr          string
+	bootDir           string
+	catalogDir        string
+	baseURL           string
+	logFormat         string
+	templatesDir      string
+	enableProxyDHCP   bool
+	proxyDHCPAddr     string
+	proxyDHCPBINLAddr string
+	serverIP          string
+	proxmoxToken      string
+}
+
+// parseServeFlags parses args into a serveConfig. A parse failure has already
+// been reported by the flag package, so the error is only a signal to exit.
+func parseServeFlags(args []string) (*serveConfig, error) {
+	var c serveConfig
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	httpAddr := fs.String("http-addr", "0.0.0.0:8080", "HTTP listen address")
-	tftpAddr := fs.String("tftp-addr", "0.0.0.0:69", "TFTP listen address")
-	bootDir := fs.String("boot-dir", "./boot", "directory of boot assets served over TFTP and HTTP")
-	catalogDir := fs.String("catalog", "", "catalog directory of *.hcl files")
-	baseURL := fs.String("url", "", "booty's externally reachable base URL (default: derived from request Host)")
-	logFormat := fs.String("log-format", "text", "log format: text or json")
-	templatesDir := fs.String(
+	fs.StringVar(&c.httpAddr, "http-addr", "0.0.0.0:8080", "HTTP listen address")
+	fs.StringVar(&c.tftpAddr, "tftp-addr", "0.0.0.0:69", "TFTP listen address")
+	fs.StringVar(&c.bootDir, "boot-dir", "./boot", "directory of boot assets served over TFTP and HTTP")
+	fs.StringVar(&c.catalogDir, "catalog", "", "catalog directory of *.hcl files")
+	fs.StringVar(&c.baseURL, "url", "", "booty's externally reachable base URL (default: derived from request Host)")
+	fs.StringVar(&c.logFormat, "log-format", "text", "log format: text or json")
+	fs.StringVar(
+		&c.templatesDir,
 		"templates-dir",
 		"",
 		"directory of template overrides layered over the embedded set (family subdirs, e.g. talos/worker.yaml.tmpl)",
 	)
-	enableProxyDHCP := fs.Bool("proxydhcp", false, "run a PXE proxyDHCP responder (coexists with an existing DHCP server)")
-	proxyDHCPAddr := fs.String("proxydhcp-addr", "0.0.0.0:67", "proxyDHCP listen address")
-	proxyDHCPBINLAddr := fs.String("proxydhcp-binl-addr", "0.0.0.0:4011", "proxyDHCP boot-server (BINL) listen address")
-	serverIP := fs.String("server-ip", "", "booty's IPv4 advertised to PXE clients as the boot server (required with --proxydhcp)")
-	proxmoxToken := fs.String(
+	fs.BoolVar(
+		&c.enableProxyDHCP,
+		"proxydhcp",
+		false,
+		"run a PXE proxyDHCP responder (coexists with an existing DHCP server)",
+	)
+	fs.StringVar(&c.proxyDHCPAddr, "proxydhcp-addr", "0.0.0.0:67", "proxyDHCP listen address")
+	fs.StringVar(
+		&c.proxyDHCPBINLAddr,
+		"proxydhcp-binl-addr",
+		"0.0.0.0:4011",
+		"proxyDHCP boot-server (BINL) listen address",
+	)
+	fs.StringVar(
+		&c.serverIP,
+		"server-ip",
+		"",
+		"booty's IPv4 advertised to PXE clients as the boot server (required with --proxydhcp)",
+	)
+	fs.StringVar(
+		&c.proxmoxToken,
 		"proxmox-token",
 		"",
 		"name:secret bearer token required on POST /proxmox/answer (match prepare-iso --answer-auth-token)",
 	)
 	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func cmdServe(args []string) int {
+	c, err := parseServeFlags(args)
+	if err != nil {
 		return 2
 	}
 
-	logger := newLogger(*logFormat)
+	logger := newLogger(c.logFormat)
 	slog.SetDefault(logger)
 
 	// A SIGINT/SIGTERM cancels ctx, which each server observes to shut down.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	cat, ok := loadCatalog(ctx, *catalogDir, logger)
+	cat, ok := loadCatalog(ctx, c.catalogDir, logger)
 	if !ok {
 		return 1
 	}
 
-	renderer, err := newRenderer(*templatesDir)
+	renderer, err := newRenderer(c.templatesDir)
 	if err != nil {
 		logger.Error("render init failed", "err", err)
 		return 1
 	}
 
-	proxy, ok := newProxyDHCP(*enableProxyDHCP, *serverIP, logger)
+	proxy, ok := newProxyDHCP(c.enableProxyDHCP, c.serverIP, logger)
 	if !ok {
 		return 1
 	}
 
 	logger.Info("booty starting",
 		"version", version,
-		"http_addr", *httpAddr,
-		"tftp_addr", *tftpAddr,
-		"boot_dir", *bootDir,
-		"proxydhcp", *enableProxyDHCP,
+		"http_addr", c.httpAddr,
+		"tftp_addr", c.tftpAddr,
+		"boot_dir", c.bootDir,
+		"proxydhcp", c.enableProxyDHCP,
 	)
 
 	var wg sync.WaitGroup
 	errc := make(chan error, 3)
 
-	httpServer := httpsrv.New(httpsrv.Options{
+	httpServer, err := httpsrv.New(httpsrv.Config{
 		Logger:           logger,
 		Catalog:          cat,
 		Renderer:         renderer,
-		BootDir:          *bootDir,
-		BaseURL:          *baseURL,
-		ProxmoxAuthToken: *proxmoxToken,
+		BootDir:          c.bootDir,
+		BaseURL:          c.baseURL,
+		ProxmoxAuthToken: c.proxmoxToken,
 	})
+	if err != nil {
+		logger.Error("http init failed", "err", err,
+			"hint", "--url must be an absolute URL machines can reach, e.g. http://192.168.1.10:8080")
+		return 2
+	}
 	wg.Go(func() {
-		if err := httpServer.ListenAndServe(ctx, *httpAddr); err != nil {
+		if err := httpServer.ListenAndServe(ctx, c.httpAddr); err != nil {
 			errc <- fmt.Errorf("http: %w", err)
 		}
 	})
 	wg.Go(func() {
-		if err := tftp.New(*bootDir, logger).ListenAndServe(ctx, *tftpAddr); err != nil {
+		if err := tftp.New(tftp.Config{BootDir: c.bootDir, Logger: logger}).ListenAndServe(ctx, c.tftpAddr); err != nil {
 			errc <- fmt.Errorf("tftp: %w", err)
 		}
 	})
 	if proxy != nil {
 		wg.Go(func() {
-			if err := proxy.ListenAndServe(ctx, *proxyDHCPAddr, *proxyDHCPBINLAddr); err != nil {
+			if err := proxy.ListenAndServe(ctx, c.proxyDHCPAddr, c.proxyDHCPBINLAddr); err != nil {
 				errc <- fmt.Errorf("proxydhcp: %w", err)
 			}
 		})

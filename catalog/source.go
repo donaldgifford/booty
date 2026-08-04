@@ -2,7 +2,9 @@ package catalog
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -15,13 +17,32 @@ import (
 	"github.com/zclconf/go-cty/cty/function/stdlib"
 )
 
-// Source loads a Catalog. Implementations vary by where desired state lives:
-// DirSource reads HCL from a directory now; git:// and platform:// sources come
-// later (PLAN-0001). The interface is the seam that keeps those swappable.
-type Source interface {
-	Load(ctx context.Context) (*Catalog, error)
-	String() string
-}
+// There is deliberately no Source interface here. DirSource was its only
+// implementation and nothing in this module ever accepted one, so it declared a
+// seam that no code crossed.
+//
+// It costs a future git:// or platform:// source (PLAN-0001) nothing, because
+// Go interfaces are satisfied implicitly: a consumer that wants to swap sources
+// declares the one-method interface it needs in its own package, and DirSource
+// already satisfies it. That is also where the interface belongs — an interface
+// describes what a caller requires, and only the caller knows that.
+
+// Errors [DirSource.Load] reports for a catalog root it cannot use. They are
+// distinct because a consumer may reasonably treat them differently — an
+// unprovisioned path can be benign where an empty one is fatal. A missing
+// directory wraps [os.ErrNotExist], so errors.Is reaches that too.
+var (
+	// ErrEmptyRoot means DirSource.Root was not set. It is refused rather than
+	// defaulted: an empty Root would otherwise glob the process working
+	// directory.
+	ErrEmptyRoot = errors.New("catalog root is empty")
+
+	// ErrRootNotDirectory means Root exists but is not a directory.
+	ErrRootNotDirectory = errors.New("catalog root is not a directory")
+
+	// ErrNoCatalogFiles means Root is a directory containing no .hcl files.
+	ErrNoCatalogFiles = errors.New("no .hcl files found")
+)
 
 // DirSource loads every *.hcl file in Root, merging them into one catalog.
 // Overrides supply values for `variable` blocks by name (e.g. from a flag),
@@ -40,12 +61,29 @@ func (s DirSource) Load(ctx context.Context) (*Catalog, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	// An empty Root would make filepath.Join below produce the bare glob
+	// "*.hcl", silently loading the catalog from whatever the process working
+	// directory happens to be. Refuse rather than guess.
+	if s.Root == "" {
+		return nil, ErrEmptyRoot
+	}
+	// Stat before globbing so "the directory is not there" is distinguishable
+	// from "the directory is there and holds no catalog". A platform consumer
+	// may treat an unprovisioned path as benign and an empty one as fatal, and
+	// Glob alone reports both as zero matches.
+	info, err := os.Stat(s.Root)
+	if err != nil {
+		return nil, fmt.Errorf("catalog root %s: %w", s.Root, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("catalog root %s: %w", s.Root, ErrRootNotDirectory)
+	}
 	paths, err := filepath.Glob(filepath.Join(s.Root, "*.hcl"))
 	if err != nil {
 		return nil, fmt.Errorf("scanning %s: %w", s.Root, err)
 	}
 	if len(paths) == 0 {
-		return nil, fmt.Errorf("no .hcl files found in %s", s.Root)
+		return nil, fmt.Errorf("in %s: %w", s.Root, ErrNoCatalogFiles)
 	}
 	sort.Strings(paths)
 
@@ -54,7 +92,7 @@ func (s DirSource) Load(ctx context.Context) (*Catalog, error) {
 	for _, p := range paths {
 		f, diags := parser.ParseHCLFile(p)
 		if diags.HasErrors() {
-			return nil, fmt.Errorf("parsing %s: %s", p, diags.Error())
+			return nil, fmt.Errorf("parsing %s: %w", p, diags)
 		}
 		files = append(files, f)
 	}
@@ -80,7 +118,7 @@ func decodeCatalog(files []*hcl.File, overrides map[string]string) (*Catalog, er
 	body := hcl.MergeFiles(files)
 	content, diags := body.Content(catalogSchema)
 	if diags.HasErrors() {
-		return nil, fmt.Errorf("catalog structure: %s", diags.Error())
+		return nil, fmt.Errorf("catalog structure: %w", diags)
 	}
 
 	funcs := evalFuncs()
@@ -115,7 +153,7 @@ func decodeCatalog(files []*hcl.File, overrides map[string]string) (*Catalog, er
 			Vars   map[string]string `hcl:"vars,optional"`
 		}
 		if d := gohcl.DecodeBody(b.Body, ctx, &pb); d.HasErrors() {
-			return nil, fmt.Errorf("profile %q: %s", name, d.Error())
+			return nil, fmt.Errorf("profile %q: %w", name, d)
 		}
 		cat.Profiles[name] = Profile{Name: name, Boot: pb.Boot, Render: pb.Render, Vars: pb.Vars}
 	}
@@ -128,7 +166,7 @@ func decodeCatalog(files []*hcl.File, overrides map[string]string) (*Catalog, er
 			Vars     map[string]string `hcl:"vars,optional"`
 		}
 		if d := gohcl.DecodeBody(b.Body, ctx, &gb); d.HasErrors() {
-			return nil, fmt.Errorf("group %q: %s", name, d.Error())
+			return nil, fmt.Errorf("group %q: %w", name, d)
 		}
 		cat.Groups = append(cat.Groups, Group{
 			Name: name, Profile: gb.Profile, Selector: gb.Selector, Vars: gb.Vars,
@@ -153,13 +191,13 @@ func evalVariables(blocks hcl.Blocks, funcs map[string]function.Function, overri
 			Remain  hcl.Body       `hcl:",remain"` // tolerate type/description/etc.
 		}
 		if d := gohcl.DecodeBody(b.Body, base, &decl); d.HasErrors() {
-			return nil, fmt.Errorf("variable %q: %s", name, d.Error())
+			return nil, fmt.Errorf("variable %q: %w", name, d)
 		}
 		val := cty.NullVal(cty.DynamicPseudoType)
 		if decl.Default != nil {
 			v, d := decl.Default.Value(base)
 			if d.HasErrors() {
-				return nil, fmt.Errorf("variable %q default: %s", name, d.Error())
+				return nil, fmt.Errorf("variable %q default: %w", name, d)
 			}
 			val = v
 		}
@@ -179,7 +217,7 @@ func evalLocals(blocks hcl.Blocks, vars map[string]cty.Value, funcs map[string]f
 	for _, b := range blocks {
 		attrs, diags := b.Body.JustAttributes()
 		if diags.HasErrors() {
-			return nil, fmt.Errorf("locals: %s", diags.Error())
+			return nil, fmt.Errorf("locals: %w", diags)
 		}
 		for name, a := range attrs {
 			if _, dup := exprs[name]; dup {

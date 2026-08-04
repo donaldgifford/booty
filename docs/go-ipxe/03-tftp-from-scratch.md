@@ -20,7 +20,7 @@ the two are meant to be read side by side.
 
 Recall the state machine from Chapter 1:
 
-```
+```text
 POWER ON → DHCP → TFTP → IPXE_RUNNING → KERNEL_DOWNLOAD → CLOUD_INIT → DONE
                    ▲
                    └── you are here
@@ -64,7 +64,7 @@ integers are big-endian (network byte order).
 **RRQ** — the request. Filename and mode are NUL-terminated ASCII; options are
 optional NUL-terminated key/value pairs appended after the mode:
 
-```
+```text
  2 bytes    string   1 byte   string   1 byte   (string 1byte string 1byte)*
 ┌────────┬──────────┬──────┬────────┬──────┬────────────────────────────────┐
 │ 0x0001 │ filename │  \0  │  mode  │  \0  │ blksize \0 1468 \0 tsize \0 0… │
@@ -76,7 +76,7 @@ modes are dead; we reject anything that isn't `octet`.
 
 **DATA** — opcode, 16-bit block number (starts at 1), then 0–`blksize` bytes:
 
-```
+```text
  2 bytes    2 bytes    n bytes
 ┌────────┬──────────┬──────────┐
 │ 0x0003 │  block#  │   data   │
@@ -86,7 +86,7 @@ modes are dead; we reject anything that isn't `octet`.
 **ACK** — opcode and the block number being acknowledged. Block 0 acknowledges
 an OACK.
 
-```
+```text
  2 bytes    2 bytes
 ┌────────┬──────────┐
 │ 0x0004 │  block#  │
@@ -96,7 +96,7 @@ an OACK.
 **ERROR** — a code and a NUL-terminated human message. Codes: 0 not-defined, 1
 file-not-found, 2 access-violation, 3 disk-full, 4 illegal-operation.
 
-```
+```text
  2 bytes    2 bytes    string   1 byte
 ┌────────┬──────────┬─────────┬──────┐
 │ 0x0005 │  errcode │ message │  \0  │
@@ -120,7 +120,7 @@ func buildDATA(block uint16, data []byte) []byte {
 The single most important — and most surprising — thing about TFTP is that a
 transfer uses **two different server ports**. The exchange:
 
-```
+```text
 client:X → server:69   RRQ "ipxe.efi" octet          (the well-known port)
 server:Y → client:X    DATA block 1                   (Y is a NEW ephemeral port!)
 client:X → server:Y    ACK 1
@@ -211,7 +211,7 @@ a DATA block — listing only the options it accepts (omitting one means
 "declined"). The client confirms with `ACK 0`, and only then does DATA block 1
 flow:
 
-```
+```text
 client → server   RRQ "ipxe.efi" octet blksize 1468 tsize 0
 server → client   OACK blksize 1468 tsize 1138688
 client → server   ACK 0
@@ -373,6 +373,43 @@ sudo tcpdump -i lo0 -n -v 'udp port 6969 or (udp and src port 6969)'
 
 For production you'll bind `:69` (needs root or `CAP_NET_BIND_SERVICE`) and
 point your DHCP `next-server`/`filename` at it, as configured in Chapter 2.
+
+## The two limits, and why UDP forces them
+
+TFTP has no handshake. A datagram's source address is whatever the sender wrote
+in it, so the first packet of a transfer may be going to a machine that never
+asked for anything. Two consequences fall out of that, and both are bounded in
+`Serve` and `sendWithRetry`:
+
+**Retransmission is what turns a reflector into an amplifier.** Answering a
+request is unavoidable — a server that refuses is not a server. But re-sending
+that answer `maxRetries` times to an address that has never replied multiplies
+one forged ~50-byte RRQ into four full blocks aimed at a victim. Measured here
+before the fix: **121x**. The fix is to notice who has actually spoken. An ACK
+can only come from something that received our packet, so it confirms the
+address; until one arrives, the first block goes out exactly once. After it, the
+full retry budget is restored, because a lossy link is precisely what
+stop-and-wait exists for. `TestAmplificationBoundedForSilentPeer` measures the
+silent case and `TestConfirmedPeerStillGetsRetries` pins that the budget
+survives for real clients.
+
+This shrinks the multiplier, not reflection itself: an RRQ with no options is
+still answered with a 516-byte block, roughly 26x a small request. That residual
+is a property of the protocol, and the answer to it is network placement —
+`--tftp-addr` on a provisioning VLAN — not code.
+
+**Every transfer holds a socket, so unanswered requests are a resource leak with
+a sender behind it.** A transfer that is never ACKed still occupies its
+ephemeral socket and goroutine for `maxRetries × transferTimeout`. Measured: 200
+unanswered RRQs took the process from 3 goroutines to 204, and roughly 51
+requests per second is enough to exhaust a default fd table. `Serve` caps
+in-flight transfers at `maxConcurrentTransfers` and drops past it rather than
+accepting work it cannot finish — shedding keeps the boots already in progress
+alive, which is the thing that actually matters at 2 a.m.
+
+Dropping rather than replying with an ERROR is deliberate: an ERROR would give a
+real client faster feedback, but it would also make booty a 1:1 reflector for a
+spoofed source, and a PXE client retries an unanswered RRQ on its own.
 
 ## What we deliberately left out
 

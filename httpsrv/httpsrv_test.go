@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,19 +36,23 @@ func bootCatalog() *catalog.Catalog {
 	}
 }
 
-func newTestServer(t *testing.T, opts Options) http.Handler {
+func newTestServer(t *testing.T, cfg Config) http.Handler {
 	t.Helper()
-	if opts.Logger == nil {
-		opts.Logger = quiet()
+	if cfg.Logger == nil {
+		cfg.Logger = quiet()
 	}
-	if opts.Renderer == nil {
+	if cfg.Renderer == nil {
 		r, err := render.New()
 		if err != nil {
 			t.Fatalf("render.New: %v", err)
 		}
-		opts.Renderer = r
+		cfg.Renderer = r
 	}
-	return New(opts).Handler()
+	srv, err := New(cfg)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return srv.Handler()
 }
 
 func get(t *testing.T, h http.Handler, target string) *httptest.ResponseRecorder {
@@ -58,14 +63,14 @@ func get(t *testing.T, h http.Handler, target string) *httptest.ResponseRecorder
 }
 
 func TestHealthz(t *testing.T) {
-	rec := get(t, New(Options{Logger: quiet()}).Handler(), "/healthz")
+	rec := get(t, newTestServer(t, Config{}), "/healthz")
 	if rec.Code != http.StatusOK || rec.Body.String() != "ok\n" {
 		t.Fatalf("healthz = %d %q", rec.Code, rec.Body.String())
 	}
 }
 
 func TestChainEndpoint(t *testing.T) {
-	h := newTestServer(t, Options{BaseURL: "http://booty.test:8080"})
+	h := newTestServer(t, Config{BaseURL: "http://booty.test:8080"})
 	rec := get(t, h, "/boot.ipxe")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
@@ -82,7 +87,7 @@ func TestChainEndpoint(t *testing.T) {
 }
 
 func TestIPXEMatch(t *testing.T) {
-	h := newTestServer(t, Options{Catalog: bootCatalog(), BaseURL: "http://booty.test:8080"})
+	h := newTestServer(t, Config{Catalog: bootCatalog(), BaseURL: "http://booty.test:8080"})
 	// Non-canonical MAC in the query must still match the canonical selector.
 	rec := get(t, h, "/ipxe?mac=D0-50-99-B3-4C-50&arch=x86_64")
 	if rec.Code != http.StatusOK {
@@ -100,7 +105,7 @@ func TestIPXEMatch(t *testing.T) {
 func TestIPXENoMatchServesShell(t *testing.T) {
 	// No catch-all: an unknown MAC must still get a 200 iPXE shell script, not a
 	// 404, because iPXE handles non-200 poorly.
-	h := newTestServer(t, Options{Catalog: bootCatalog()})
+	h := newTestServer(t, Config{Catalog: bootCatalog()})
 	rec := get(t, h, "/ipxe?mac=00:00:00:00:00:01")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -115,7 +120,7 @@ func TestIPXENoMatchServesShell(t *testing.T) {
 
 func TestIPXEBaseURLFromHost(t *testing.T) {
 	// With no configured BaseURL, the handler derives it from the request Host.
-	h := newTestServer(t, Options{Catalog: bootCatalog()})
+	h := newTestServer(t, Config{Catalog: bootCatalog()})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/ipxe?mac=d0:50:99:b3:4c:50", http.NoBody)
 	req.Host = "10.0.0.5:8080"
@@ -133,7 +138,7 @@ func TestBootFileServed(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "talos", "v1.7.6", "vmlinuz"), []byte("KERNELBYTES"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	h := newTestServer(t, Options{BootDir: dir})
+	h := newTestServer(t, Config{BootDir: dir})
 
 	rec := get(t, h, "/boot/talos/v1.7.6/vmlinuz")
 	if rec.Code != http.StatusOK {
@@ -150,7 +155,7 @@ func TestBootFileTraversalBlocked(t *testing.T) {
 	_ = os.WriteFile(secret, []byte("nope"), 0o600)
 	t.Cleanup(func() { _ = os.Remove(secret) })
 
-	h := newTestServer(t, Options{BootDir: dir})
+	h := newTestServer(t, Config{BootDir: dir})
 	rec := get(t, h, "/boot/../secret")
 	// The cleaned path resolves under bootDir (a 404) rather than escaping it;
 	// either way the secret's contents must not appear.
@@ -180,7 +185,7 @@ func talosConfigCatalog() *catalog.Catalog {
 }
 
 func TestMachineConfig(t *testing.T) {
-	h := newTestServer(t, Options{Catalog: talosConfigCatalog()})
+	h := newTestServer(t, Config{Catalog: talosConfigCatalog()})
 	rec := get(t, h, "/machine-config?mac=d0:50:99:b3:4c:50")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
@@ -194,7 +199,7 @@ func TestMachineConfig(t *testing.T) {
 }
 
 func TestMachineConfigNoMatch(t *testing.T) {
-	h := newTestServer(t, Options{Catalog: talosConfigCatalog()})
+	h := newTestServer(t, Config{Catalog: talosConfigCatalog()})
 	if rec := get(t, h, "/machine-config?mac=00:00:00:00:00:02"); rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
@@ -202,7 +207,7 @@ func TestMachineConfigNoMatch(t *testing.T) {
 
 func TestMachineConfigWrongKind(t *testing.T) {
 	// bootCatalog's profile boots but declares no machineconfig render → 409.
-	h := newTestServer(t, Options{Catalog: bootCatalog()})
+	h := newTestServer(t, Config{Catalog: bootCatalog()})
 	if rec := get(t, h, "/machine-config?mac=d0:50:99:b3:4c:50"); rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", rec.Code)
 	}
@@ -234,7 +239,7 @@ func fromIP(t *testing.T, h http.Handler, target, ip string) *httptest.ResponseR
 }
 
 func TestCloudInitUserData(t *testing.T) {
-	h := newTestServer(t, Options{Catalog: cloudInitCatalog()})
+	h := newTestServer(t, Config{Catalog: cloudInitCatalog()})
 	rec := fromIP(t, h, "/cloud-init/user-data", "192.168.1.50")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
@@ -245,7 +250,7 @@ func TestCloudInitUserData(t *testing.T) {
 }
 
 func TestCloudInitMetaData(t *testing.T) {
-	h := newTestServer(t, Options{Catalog: cloudInitCatalog()})
+	h := newTestServer(t, Config{Catalog: cloudInitCatalog()})
 	rec := fromIP(t, h, "/cloud-init/meta-data", "192.168.1.50")
 	if !strings.Contains(rec.Body.String(), "instance-id: booty-ubuntu-01") {
 		t.Errorf("meta-data wrong:\n%s", rec.Body.String())
@@ -253,7 +258,7 @@ func TestCloudInitMetaData(t *testing.T) {
 }
 
 func TestCloudInitVendorDataEmpty(t *testing.T) {
-	h := newTestServer(t, Options{Catalog: cloudInitCatalog()})
+	h := newTestServer(t, Config{Catalog: cloudInitCatalog()})
 	rec := fromIP(t, h, "/cloud-init/vendor-data", "192.168.1.50")
 	if rec.Code != http.StatusOK || rec.Body.Len() != 0 {
 		t.Fatalf("vendor-data = %d, %d bytes; want 200 empty", rec.Code, rec.Body.Len())
@@ -261,7 +266,7 @@ func TestCloudInitVendorDataEmpty(t *testing.T) {
 }
 
 func TestCloudInitNoMatch(t *testing.T) {
-	h := newTestServer(t, Options{Catalog: cloudInitCatalog()})
+	h := newTestServer(t, Config{Catalog: cloudInitCatalog()})
 	if rec := fromIP(t, h, "/cloud-init/user-data", "10.9.9.9"); rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404 for unknown IP", rec.Code)
 	}
@@ -313,7 +318,7 @@ func postProxmox(t *testing.T, h http.Handler, body string, headers map[string]s
 }
 
 func TestProxmoxAnswer(t *testing.T) {
-	h := newTestServer(t, Options{Catalog: proxmoxCatalog()})
+	h := newTestServer(t, Config{Catalog: proxmoxCatalog()})
 	rec := postProxmox(t, h, proxmoxSysInfoJSON, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
@@ -331,7 +336,7 @@ func TestProxmoxAnswerNoMatch(t *testing.T) {
 	// Without the catch-all, unknown NICs are a clean 404.
 	cat := proxmoxCatalog()
 	cat.Groups = cat.Groups[:1] // drop the catch-all
-	h := newTestServer(t, Options{Catalog: cat})
+	h := newTestServer(t, Config{Catalog: cat})
 	body := `{"network_interfaces": [{"name": "eno1", "mac": "00:00:00:00:00:01"}]}`
 	if rec := postProxmox(t, h, body, nil); rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
@@ -341,7 +346,7 @@ func TestProxmoxAnswerNoMatch(t *testing.T) {
 func TestProxmoxAnswerWrongKind(t *testing.T) {
 	// With ONLY the catch-all matching, the resolved profile is the iPXE rescue —
 	// not an answer file — and that must be a 409, not rescue bytes as TOML.
-	h := newTestServer(t, Options{Catalog: proxmoxCatalog()})
+	h := newTestServer(t, Config{Catalog: proxmoxCatalog()})
 	body := `{"network_interfaces": [{"name": "eno1", "mac": "00:00:00:00:00:01"}]}`
 	if rec := postProxmox(t, h, body, nil); rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", rec.Code)
@@ -349,7 +354,7 @@ func TestProxmoxAnswerWrongKind(t *testing.T) {
 }
 
 func TestProxmoxAnswerAuth(t *testing.T) {
-	h := newTestServer(t, Options{Catalog: proxmoxCatalog(), ProxmoxAuthToken: "booty:s3cret"})
+	h := newTestServer(t, Config{Catalog: proxmoxCatalog(), ProxmoxAuthToken: "booty:s3cret"})
 	if rec := postProxmox(t, h, proxmoxSysInfoJSON, nil); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("no token: status = %d, want 401", rec.Code)
 	}
@@ -364,7 +369,7 @@ func TestProxmoxAnswerAuth(t *testing.T) {
 }
 
 func TestProxmoxAnswerBadJSON(t *testing.T) {
-	h := newTestServer(t, Options{Catalog: proxmoxCatalog()})
+	h := newTestServer(t, Config{Catalog: proxmoxCatalog()})
 	if rec := postProxmox(t, h, "not json", nil); rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
@@ -373,7 +378,7 @@ func TestProxmoxAnswerBadJSON(t *testing.T) {
 func TestProxmoxAnswerGETNotAllowed(t *testing.T) {
 	// The installer POSTs; the route is registered POST-only, so GET is a 405
 	// from the mux (the classic static-file-server mistake, inverted).
-	h := newTestServer(t, Options{Catalog: proxmoxCatalog()})
+	h := newTestServer(t, Config{Catalog: proxmoxCatalog()})
 	if rec := get(t, h, "/proxmox/answer"); rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET status = %d, want 405", rec.Code)
 	}
@@ -381,8 +386,73 @@ func TestProxmoxAnswerGETNotAllowed(t *testing.T) {
 
 func TestRoutesGatedByDeps(t *testing.T) {
 	// A health-only server (no catalog/renderer/bootDir) must not expose /ipxe.
-	h := New(Options{Logger: quiet()}).Handler()
+	h := newTestServer(t, Config{})
 	if rec := get(t, h, "/ipxe?mac=x"); rec.Code != http.StatusNotFound {
 		t.Fatalf("/ipxe without catalog = %d, want 404", rec.Code)
+	}
+}
+
+// TestBootDirectoryListingRefused pins the fix for an information disclosure:
+// GET /boot/ resolved to bootDir itself, the traversal guard allowed it (the
+// path is inside bootDir), and http.ServeFile fell through to its HTML index,
+// enumerating every boot asset to any unauthenticated caller.
+func TestBootDirectoryListingRefused(t *testing.T) {
+	bootDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bootDir, "vmlinuz"), []byte("kernel"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(bootDir, "talos"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := newTestServer(t, Config{BootDir: bootDir})
+
+	for _, target := range []string{"/boot/", "/boot/talos", "/boot/talos/"} {
+		rec := get(t, h, target)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", target, rec.Code)
+		}
+		if strings.Contains(rec.Body.String(), "vmlinuz") {
+			t.Errorf("GET %s leaked a directory listing: %q", target, rec.Body.String())
+		}
+	}
+
+	// A real asset must still be served.
+	if rec := get(t, h, "/boot/vmlinuz"); rec.Code != http.StatusOK || rec.Body.String() != "kernel" {
+		t.Errorf("GET /boot/vmlinuz = %d %q, want 200 \"kernel\"", rec.Code, rec.Body.String())
+	}
+}
+
+// TestIdentityRejectsControlCharacters pins the fix for a template-injection
+// path. Identity strings are interpolated into the YAML and TOML that render
+// produces, and text/template does not escape, so a newline in the MAC let a
+// machine append keys the operator never wrote — root_ssh_keys in a Proxmox
+// answer file, or an install block in a machineconfig. booty exists to decide
+// centrally what a machine installs, so a machine editing its own answer is a
+// policy bypass.
+func TestIdentityRejectsControlCharacters(t *testing.T) {
+	h := newTestServer(t, Config{Catalog: bootCatalog()})
+	injected := url.QueryEscape("d0:50:99:b3:4c:50\nroot_ssh_keys = [\"attacker\"]")
+
+	rec := get(t, h, "/machine-config?arch=x86_64&mac="+injected)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("machine-config with an injected MAC = %d, want 400", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "attacker") {
+		t.Errorf("response echoed the injected payload: %q", rec.Body.String())
+	}
+
+	// /ipxe answers with a script rather than a status code, but must not match.
+	rec = get(t, h, "/ipxe?arch=x86_64&mac="+injected)
+	body := rec.Body.String()
+	if !strings.HasPrefix(body, "#!ipxe") {
+		t.Errorf("ipxe reply is not a script: %q", body)
+	}
+	if strings.Contains(body, "attacker") {
+		t.Errorf("ipxe script echoed the injected payload: %q", body)
+	}
+
+	// A clean MAC still resolves.
+	if rec := get(t, h, "/ipxe?arch=x86_64&mac=d0:50:99:b3:4c:50"); rec.Code != http.StatusOK {
+		t.Errorf("clean MAC = %d, want 200", rec.Code)
 	}
 }

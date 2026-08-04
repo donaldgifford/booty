@@ -40,9 +40,34 @@ jobs:
       - name: Run markdown lint
         run: just lint-md
 
+  # The Starlight site (DESIGN-0002) is not scaffolded yet, and every step of the
+  # build below runs in a `site` directory that does not exist — so the job fails
+  # on its first run step with "No such file or directory". A permanently red
+  # check is worse than no check: it trains everyone to merge past CI. Gating on
+  # the scaffold means the build starts running by itself the day site/ lands,
+  # with no workflow edit to remember.
+  detect-site:
+    name: Detect site
+    runs-on: ubuntu-latest
+    outputs:
+      present: ${{ steps.check.outputs.present }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: check
+        run: |
+          if [ -f site/package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::site/package.json not found — skipping the Starlight build (DESIGN-0002 not implemented yet)"
+          fi
+
   build:
     name: Build Starlight
     runs-on: ubuntu-latest
+    needs: detect-site
+    if: needs.detect-site.outputs.present == 'true'
     defaults:
       run:
         working-directory: site

@@ -171,3 +171,79 @@ func TestValidate(t *testing.T) {
 		}
 	})
 }
+
+// TestMatchUnknownProfileSentinel pins the distinction between "this machine is
+// not in the catalog" and "the catalog is broken". They call for opposite
+// remedies, and before ErrUnknownProfile existed a caller could only tell them
+// apart by matching on the error string — so httpsrv told the operator to add a
+// group for a machine whose group already existed.
+func TestMatchUnknownProfileSentinel(t *testing.T) {
+	c := &Catalog{
+		Profiles: map[string]Profile{},
+		Groups: []Group{
+			{Name: "worker-01", Profile: "does-not-exist", Selector: map[string]string{"mac": "d0:50:99:b3:4c:50"}},
+		},
+	}
+
+	_, err := c.Match(Identity{MAC: "d0:50:99:b3:4c:50"})
+	if err == nil {
+		t.Fatal("want an error for a group naming a missing profile")
+	}
+	if !errors.Is(err, ErrUnknownProfile) {
+		t.Errorf("errors.Is(err, ErrUnknownProfile) = false; err = %v", err)
+	}
+	if errors.Is(err, ErrNoMatch) {
+		t.Error("a dangling profile reference must not report as ErrNoMatch")
+	}
+
+	// A machine no group selects still reports ErrNoMatch, not ErrUnknownProfile.
+	_, err = c.Match(Identity{MAC: "aa:bb:cc:dd:ee:ff"})
+	if !errors.Is(err, ErrNoMatch) {
+		t.Errorf("unselected machine: errors.Is(err, ErrNoMatch) = false; err = %v", err)
+	}
+	if errors.Is(err, ErrUnknownProfile) {
+		t.Error("unselected machine must not report as ErrUnknownProfile")
+	}
+}
+
+// TestMatchReportsSpecificity pins the term count Match already computes onto
+// the result. Without it a caller resolving one machine several ways — a
+// multi-NIC host tried under each of its MACs — had to rescan Catalog.Groups by
+// name to recover the number, which is what httpsrv did.
+func TestMatchReportsSpecificity(t *testing.T) {
+	c := &Catalog{
+		Profiles: map[string]Profile{"p": {Name: "p"}},
+		Groups: []Group{
+			{Name: "catch-all", Profile: "p"},
+			{Name: "by-mac", Profile: "p", Selector: map[string]string{"mac": "d0:50:99:b3:4c:50"}},
+			{Name: "by-mac-and-arch", Profile: "p", Selector: map[string]string{
+				"mac": "d0:50:99:b3:4c:51", "arch": "x86_64",
+			}},
+		},
+	}
+
+	tests := []struct {
+		name      string
+		id        Identity
+		wantGroup string
+		wantSpec  int
+	}{
+		{"catch-all matches with no terms", Identity{MAC: "aa:bb:cc:dd:ee:ff"}, "catch-all", 0},
+		{"one selector term", Identity{MAC: "d0:50:99:b3:4c:50"}, "by-mac", 1},
+		{"two selector terms", Identity{MAC: "d0:50:99:b3:4c:51", Arch: "x86_64"}, "by-mac-and-arch", 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := c.Match(tt.id)
+			if err != nil {
+				t.Fatalf("Match: %v", err)
+			}
+			if res.Group != tt.wantGroup {
+				t.Fatalf("group = %q, want %q", res.Group, tt.wantGroup)
+			}
+			if res.Specificity != tt.wantSpec {
+				t.Errorf("Specificity = %d, want %d", res.Specificity, tt.wantSpec)
+			}
+		})
+	}
+}

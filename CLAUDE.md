@@ -25,7 +25,7 @@ reference consumer, the `booty` binary (ADR-0002):
 
 ```text
 cmd/booty/    # reference consumer — keep thin, parse flags + call the library
-catalog/                # identity→group→profile model, matcher, HCL Source
+catalog/                # identity→group→profile model, matcher, HCL DirSource
 render/                 # text/template pipeline (iPXE, Talos, cloud-init, Proxmox)
 httpsrv/                # stdlib HTTP serving core (boot + config endpoints)
 tftp/                   # read-only TFTP server (RFC 1350 + options)
@@ -130,6 +130,22 @@ the cache layers.
   state, mount a writable volume — the rootfs is read-only. Binding the
   privileged UDP ports (69, 67, 4011) in a container needs
   `CAP_NET_BIND_SERVICE` or remapped `--tftp-addr`/`--proxydhcp-addr`.
+- **`GOTOOLCHAIN=auto` breaks `go-licenses`**. If the `go` on PATH is
+  older than `go.mod`'s directive, Go silently switches to a downloaded
+  toolchain and `go list` then reports stdlib packages under
+  `golang.org/toolchain@…` instead of GOROOT. go-licenses v1.6.0 reads
+  that as "does not have module info" and dies — so `just ci` fails
+  locally while CI passes, because `actions/setup-go` sets
+  `GOTOOLCHAIN=local`. The `license-check`/`license-report` recipes pin
+  it too. The real trigger is `mise.toml` and `go.mod` drifting apart;
+  run `mise install` after bumping either.
+- **Markdown in `docs/` must stay CommonMark + GFM.** `just lint-md`
+  (the `Lint Markdown` CI job) runs markdownlint-cli2 and rejects
+  MkDocs-only admonitions (`!!! note`, `??? note`), which render as
+  literal text everywhere but MkDocs — `docs/` is the shared source for
+  both the Starlight site and a future MkDocs build (DESIGN-0002).
+  Prettier and docz fight over `docs/*/README.md`, so those are in
+  `.prettierignore`; docz owns them.
 
 ## Renovate
 

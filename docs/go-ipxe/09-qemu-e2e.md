@@ -63,16 +63,20 @@ The wiring reuses the public seams the earlier chapters were careful to expose �
 so the test hosts booty's own code, not a reimplementation:
 
 ```go
-handler := rec.wrap(httpsrv.New(httpsrv.Options{
+bootSrv, err := httpsrv.New(httpsrv.Config{
 	Logger: logger, Catalog: cat, Renderer: renderer, BootDir: bootDir,
-}).Handler())
+})
+if err != nil {
+	t.Fatalf("httpsrv.New: %v", err)
+}
+handler := rec.wrap(bootSrv.Handler())
 
 ln, _ := net.Listen("tcp", "127.0.0.1:0")        // ephemeral loopback port
 srv := &http.Server{Handler: handler}
 go srv.Serve(ln)
 
 pc, _ := net.ListenPacket("udp", "127.0.0.1:0")  // ephemeral UDP port
-go tftp.New(bootDir, logger).Serve(ctx, pc)      // booty's real TFTP server
+go tftp.New(tftp.Config{BootDir: bootDir, Logger: logger}).Serve(ctx, pc)      // booty's real TFTP server
 ```
 
 The catalog it loads is the *shipped example* (`examples/catalog`), so the test
@@ -114,7 +118,7 @@ TFTP; it's the protocol, and it's the same wire contract Chapter 3 built.
 
 It passes in a fraction of a second, on any machine:
 
-```
+```console
 $ just test-e2e
 === RUN   TestE2EProtocolReachability
 --- PASS: TestE2EProtocolReachability (0.01s)
@@ -236,7 +240,7 @@ if skip != "" {
 On the machine this chapter was written on — and on a default CI runner — that's
 exactly what happens:
 
-```
+```text
 === RUN   TestE2EQEMUBoot
     e2e_test.go: QEMU tier skipped: qemu not found (set BOOTY_E2E_QEMU or install qemu-system-x86_64)
 --- SKIP: TestE2EQEMUBoot (0.00s)

@@ -1,8 +1,3 @@
-// Package httpsrv is booty's stdlib HTTP serving core. It routes the boot-time
-// HTTP surface: health checks, the chainload and per-machine iPXE scripts, and
-// the boot-asset (kernel/initrd) files. Chapter 6 adds the machineconfig and
-// cloud-init endpoints to the same mux. The package is named httpsrv rather than
-// http so it never shadows the standard library's net/http inside its own files.
 package httpsrv
 
 import (
@@ -10,11 +5,13 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,10 +20,10 @@ import (
 	"github.com/donaldgifford/booty/render"
 )
 
-// Options configures a Server. Catalog/Renderer enable the iPXE endpoints;
+// Config configures a Server. Catalog/Renderer enable the iPXE endpoints;
 // BootDir enables the /boot asset endpoint. Any of them may be zero, in which
 // case the corresponding routes are simply not registered (health always is).
-type Options struct {
+type Config struct {
 	Logger   *slog.Logger
 	Catalog  *catalog.Catalog
 	Renderer *render.Renderer
@@ -40,7 +37,8 @@ type Options struct {
 	ProxmoxAuthToken string
 }
 
-// Server owns the HTTP listener and its dependencies. Construct with New.
+// Server owns the HTTP listener and its dependencies. Construct with New: a
+// zero Server is not usable and its handlers panic on a nil logger.
 type Server struct {
 	logger       *slog.Logger
 	catalog      *catalog.Catalog
@@ -50,20 +48,59 @@ type Server struct {
 	proxmoxToken string
 }
 
+// ErrInvalidBaseURL is returned by New when [Config.BaseURL] is set to
+// something that cannot be used as a URL prefix.
+var ErrInvalidBaseURL = errors.New("invalid BaseURL")
+
 // New returns a Server. A nil logger falls back to slog.Default.
-func New(opts Options) *Server {
-	logger := opts.Logger
+//
+// It errors only on an unusable BaseURL. That is worth an error return because
+// BaseURL is not consumed here — it is glued to a path and handed to machines
+// that are mid-boot with no way to report back, so a bad value produces a
+// server that starts, answers 200, and quietly emits scripts nothing can
+// follow. Every other field is either optional by design (a nil Catalog just
+// means those routes are not registered) or fails visibly at first use.
+func New(cfg Config) (*Server, error) {
+	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
+	if err := checkBaseURL(cfg.BaseURL); err != nil {
+		return nil, err
+	}
 	return &Server{
 		logger:       logger,
-		catalog:      opts.Catalog,
-		renderer:     opts.Renderer,
-		bootDir:      opts.BootDir,
-		baseURL:      strings.TrimRight(opts.BaseURL, "/"),
-		proxmoxToken: opts.ProxmoxAuthToken,
+		catalog:      cfg.Catalog,
+		renderer:     cfg.Renderer,
+		bootDir:      cfg.BootDir,
+		baseURL:      strings.TrimRight(cfg.BaseURL, "/"),
+		proxmoxToken: cfg.ProxmoxAuthToken,
+	}, nil
+}
+
+// checkBaseURL rejects a BaseURL that machines cannot fetch from. Empty is
+// valid and is the default: it means "derive the base from each request's Host
+// header", which is what a single-subnet deployment wants.
+//
+// Parsing alone is not enough. url.Parse rejects "192.168.1.10:8080" for the
+// colon in its first path segment, but a bare "boot.example.com" parses
+// happily as a relative path with no scheme and no host — so both are checked
+// explicitly rather than trusting err.
+func checkBaseURL(raw string) error {
+	if raw == "" {
+		return nil
 	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("%w %q: %w", ErrInvalidBaseURL, raw, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("%w %q: needs an http:// or https:// scheme", ErrInvalidBaseURL, raw)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("%w %q: no host", ErrInvalidBaseURL, raw)
+	}
+	return nil
 }
 
 // Handler builds the routed, middleware-wrapped http.Handler. Routes light up
@@ -151,13 +188,25 @@ func (s *Server) handleChain(w http.ResponseWriter, r *http.Request) {
 // handleIPXE is the core boot handler: derive identity from the query the chain
 // script supplied, match it to a profile, and render that profile's boot script.
 func (s *Server) handleIPXE(w http.ResponseWriter, r *http.Request) {
-	id := identityFromQuery(r.URL.Query())
+	id, err := identityFromQuery(r.URL.Query())
+	if err != nil {
+		// Still a script, not a status code: iPXE handles non-200 badly.
+		s.logger.Warn("ipxe: rejected identity", "remote", r.RemoteAddr, "err", err)
+		writeIPXE(w, errorScript("invalid identity"))
+		return
+	}
 	s.logger.Info("ipxe request", "mac", id.MAC, "ip", id.IP, "arch", id.Arch, "remote", r.RemoteAddr)
 
 	res, err := s.catalog.Match(id)
 	if err != nil {
-		// No match and no catch-all group. Serve a shell script, never a non-200:
-		// iPXE handles non-200 / non-#!ipxe responses poorly on some firmware.
+		// Always a shell script, never a non-200: iPXE handles non-200 /
+		// non-#!ipxe responses poorly on some firmware. But the two failures
+		// need opposite remedies, so they must not share a message.
+		if errors.Is(err, catalog.ErrUnknownProfile) {
+			s.logger.Error("catalog is broken", "mac", id.MAC, "err", err)
+			writeIPXE(w, errorScript(err.Error()))
+			return
+		}
 		s.logger.Warn("no catalog match", "mac", id.MAC, "err", err)
 		writeIPXE(w, noMatchScript(id))
 		return
@@ -189,6 +238,15 @@ func (s *Server) handleBoot(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	// Boot assets are files. Without this, GET /boot/ resolves to bootDir itself
+	// and http.ServeFile falls through to its HTML directory index, enumerating
+	// every asset and subdirectory on the server. 404 rather than 403 so the
+	// response does not confirm what is a directory.
+	info, err := os.Stat(fullAbs)
+	if err != nil || info.IsDir() {
+		http.NotFound(w, r)
+		return
+	}
 	// http.ServeFile gives us Range requests, ETag/Last-Modified, HEAD, and
 	// sendfile-backed streaming for the large files — everything a boot needs.
 	http.ServeFile(w, r, fullAbs)
@@ -199,9 +257,21 @@ func (s *Server) handleBoot(w http.ResponseWriter, r *http.Request) {
 // identity arrives as query parameters (same as /ipxe). Unlike /ipxe, ordinary
 // HTTP status codes are fine here — Talos retries on error.
 func (s *Server) handleMachineConfig(w http.ResponseWriter, r *http.Request) {
-	id := identityFromQuery(r.URL.Query())
+	id, err := identityFromQuery(r.URL.Query())
+	if err != nil {
+		s.logger.Warn("machine-config: rejected identity", "remote", r.RemoteAddr, "err", err)
+		http.Error(w, "invalid identity", http.StatusBadRequest)
+		return
+	}
 	res, err := s.catalog.Match(id)
 	if err != nil {
+		if errors.Is(err, catalog.ErrUnknownProfile) {
+			// The machine is fine; the catalog is not. 500, not 404, so the
+			// operator sees a server fault rather than an unknown machine.
+			s.logger.Error("machine-config: catalog is broken", "mac", id.MAC, "err", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		s.logger.Warn("machine-config: no match", "mac", id.MAC, "err", err)
 		http.Error(w, "no machine config for this machine", http.StatusNotFound)
 		return
@@ -272,8 +342,18 @@ func (s *Server) handleProxmoxAnswer(w http.ResponseWriter, r *http.Request) {
 		Product:      info.DMI.System.Name,
 		Manufacturer: info.DMI.System.Manufacturer,
 	}
+	if err := validateIdentity(base); err != nil {
+		s.logger.Warn("proxmox: rejected identity", "remote", r.RemoteAddr, "err", err)
+		http.Error(w, "invalid identity", http.StatusBadRequest)
+		return
+	}
 	macs := make([]string, 0, len(info.NICs))
 	for _, nic := range info.NICs {
+		if strings.ContainsFunc(nic.MAC, isControl) {
+			s.logger.Warn("proxmox: rejected NIC MAC", "remote", r.RemoteAddr)
+			http.Error(w, "invalid identity", http.StatusBadRequest)
+			return
+		}
 		macs = append(macs, nic.MAC)
 	}
 	if len(macs) == 0 {
@@ -304,14 +384,6 @@ func (s *Server) handleProxmoxAnswer(w http.ResponseWriter, r *http.Request) {
 // resolution whose matched group has the most selector terms. This keeps a
 // multi-NIC host matching its pinned group even when a catch-all exists.
 func (s *Server) mostSpecificMatch(base catalog.Identity, macs []string) (catalog.Identity, *catalog.Resolution) {
-	terms := func(group string) int {
-		for _, g := range s.catalog.Groups {
-			if g.Name == group {
-				return len(g.Selector)
-			}
-		}
-		return 0
-	}
 	var bestID catalog.Identity
 	var best *catalog.Resolution
 	bestTerms := -1
@@ -322,8 +394,8 @@ func (s *Server) mostSpecificMatch(base catalog.Identity, macs []string) (catalo
 		if err != nil {
 			continue
 		}
-		if n := terms(res.Group); n > bestTerms {
-			bestID, best, bestTerms = id, res, n
+		if res.Specificity > bestTerms {
+			bestID, best, bestTerms = id, res, res.Specificity
 		}
 	}
 	return bestID, best
@@ -377,6 +449,11 @@ func (s *Server) cloudInitResolve(w http.ResponseWriter, r *http.Request) (catal
 	id := catalog.Identity{IP: clientIP(r)}
 	res, err := s.catalog.Match(id)
 	if err != nil {
+		if errors.Is(err, catalog.ErrUnknownProfile) {
+			s.logger.Error("cloud-init: catalog is broken", "ip", id.IP, "err", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return id, nil, false
+		}
 		s.logger.Warn("cloud-init: no match", "ip", id.IP, "err", err)
 		http.Error(w, "no data for this instance", http.StatusNotFound)
 		return id, nil, false
@@ -407,8 +484,18 @@ func (s *Server) effectiveBaseURL(r *http.Request) string {
 }
 
 // identityFromQuery maps the chain script's query parameters onto an Identity.
-func identityFromQuery(q url.Values) catalog.Identity {
-	return catalog.Identity{
+// identityFromQuery reads a machine's identity attributes from the query string.
+//
+// It rejects values containing control characters. These strings are
+// interpolated into the YAML and TOML documents render produces, text/template
+// performs no escaping, and an embedded newline therefore lets a machine append
+// keys the operator never authored — root_ssh_keys in a Proxmox answer file, or
+// an install block in a Talos machineconfig. Since booty exists to decide
+// centrally what a machine installs, letting the machine edit its own answer
+// defeats the point. No legitimate MAC, UUID, serial, hostname or product
+// string contains a control character.
+func identityFromQuery(q url.Values) (catalog.Identity, error) {
+	id := catalog.Identity{
 		MAC:          q.Get("mac"),
 		UUID:         q.Get("uuid"),
 		Serial:       q.Get("serial"),
@@ -418,6 +505,34 @@ func identityFromQuery(q url.Values) catalog.Identity {
 		Product:      q.Get("product"),
 		Manufacturer: q.Get("manufacturer"),
 	}
+	return id, validateIdentity(id)
+}
+
+// validateIdentity rejects identity values containing control characters. See
+// identityFromQuery for why. It applies to every source of identity, not just
+// the query string: the Proxmox installer supplies its DMI strings and NIC MACs
+// in a POST body, which is no more trustworthy.
+func validateIdentity(id catalog.Identity) error {
+	for _, f := range []struct{ name, value string }{
+		{"mac", id.MAC},
+		{"uuid", id.UUID},
+		{"serial", id.Serial},
+		{"hostname", id.Hostname},
+		{"ip", id.IP},
+		{"product", id.Product},
+		{"manufacturer", id.Manufacturer},
+	} {
+		if strings.ContainsFunc(f.value, isControl) {
+			return fmt.Errorf("identity field %q contains a control character", f.name)
+		}
+	}
+	return nil
+}
+
+// isControl reports whether r is a C0/C1 control character — the class that lets
+// a value escape the line it was rendered on.
+func isControl(r rune) bool {
+	return r < 0x20 || (r >= 0x7f && r <= 0x9f)
 }
 
 // normalizeArch maps iPXE's ${buildarch} spellings to the values catalog

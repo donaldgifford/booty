@@ -83,7 +83,7 @@ spec's boot-server discovery, and some firmware insists on the full exchange.
 client "I'm a PXE boot service; go ask a boot server." The client then performs a
 second exchange on UDP port **4011** (the BINL port) to actually get the file:
 
-```
+```text
 Phase 1 (port 67):  client DISCOVER (PXEClient)
                     → real DHCP OFFER:  yiaddr = 192.168.1.111  (the lease)
                     → booty proxy OFFER: yiaddr = 0.0.0.0, no bootfile,
@@ -110,7 +110,7 @@ that, so the 4011 behavior can't silently regress:
 DHCP rides UDP; the fixed header is 236 bytes, then a 4-byte magic cookie
 (`0x63825363`), then options.
 
-```
+```text
 op(1) htype(1) hlen(1) hops(1)
 xid(4)                              ← transaction id, echoed
 secs(2) flags(2)                    ← flags bit 15 = broadcast
@@ -195,7 +195,7 @@ func (s *Server) handleDHCP(conn net.PacketConn, raw []byte, _ net.Addr) {
 	if err != nil || req.op != opBOOTREQUEST || !req.isPXE || req.msgType != msgDISCOVER {
 		return // leave ordinary DHCP traffic to the real server
 	}
-	dst := &net.UDPAddr{IP: net.IPv4bcast, Port: PortBoot}
+	dst := &net.UDPAddr{IP: net.IPv4bcast, Port: portBoot}
 	conn.WriteTo(s.buildProxyOffer(req), dst)
 }
 ```
@@ -265,7 +265,7 @@ booty serve --proxydhcp --server-ip 192.168.1.10 \
 It joins HTTP and TFTP as a third server under the same cancellable context
 (Chapter 8), so one `SIGTERM` drains all three. Misconfiguration fails fast:
 
-```
+```console
 $ booty serve --proxydhcp                 # no --server-ip
 ERROR proxydhcp init failed err="ServerIP \"\" is not a valid IPv4 address"
       hint="set --server-ip to booty's reachable IPv4"
@@ -285,7 +285,8 @@ A healthy proxyDHCP boot now has **two** request/reply legs — watch both 67/68
 ```bash
 sudo tcpdump -i eth0 -n -v "port 67 or port 68 or port 4011"
 ```
-```
+
+```text
 1. DISCOVER  0.0.0.0.68        > 255.255.255.255.67   (PXEClient)
 2. OFFER     192.168.1.1.67    > …                     (real DHCP: the lease)
 3. OFFER     192.168.1.10.67   > …                     (booty proxy: option 43, no file)
@@ -306,7 +307,7 @@ firewall on 4011, or booty not running with `--proxydhcp`.
 You don't have to use proxyDHCP — you can put the two options on the existing
 server instead (the eager path, no 4011). For reference:
 
-```
+```ini
 # dnsmasq — point PXE clients straight at booty over TFTP
 dhcp-match=set:efi,option:client-arch,7
 dhcp-boot=tag:efi,ipxe.efi,booty,192.168.1.10

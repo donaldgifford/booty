@@ -64,19 +64,22 @@ CLAUDE.md's layout and `internal/`-wall guidance are amended to match.
 
 ## Consequences
 
-**Positive**
+### Positive
 
 - The platform can construct catalogs programmatically (as the tests always
-  have), implement `Source` over its own state store, mount `Handler()` in its
-  own mux, and call `Renderer.Config` per-request with computed vars — no fork,
-  no CLI shelling.
+  have), load them from its own state store, mount `Handler()` in its own mux,
+  and call `Renderer.Config` per-request with computed vars — no fork, no CLI
+  shelling. (This said "implement `Source`" when written; that interface was
+  removed before v0.1.0 — see the note in
+  [ADR-0001](0001-hcl-for-catalog-configuration.md). The capability is unchanged,
+  because the platform declares the loader interface it needs in its own package.)
 - The walkthrough gains, rather than loses, coherence: every "testable seam" it
   taught is now visibly an API boundary, and the guide reads as "build the
   reference consumer of this library."
 - One module serves both consumers; release/goreleaser flow for the binary is
   unchanged.
 
-**Negative / costs**
+### Negative / costs
 
 - Public API means compatibility pressure. Mitigated by v0 semver (breaking
   changes allowed, flagged in release notes) until the platform consumer
@@ -84,7 +87,7 @@ CLAUDE.md's layout and `internal/`-wall guidance are amended to match.
 - Import-path churn: one mechanical rewrite of `booty/internal/X` → `booty/X`
   across code, tests, and guide prose.
 
-**Neutral**
+### Neutral
 
 - The binary's behavior, flags, and CI are unchanged; `examples/catalog` and the
   e2e tiers keep working as-is.

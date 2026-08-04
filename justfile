@@ -134,6 +134,22 @@ lint-config:
 lint-actions:
     @actionlint
 
+# Lint Markdown in docs/ and reject MkDocs-only syntax.
+# docs/ is the single source for both the Starlight site and a future
+# MkDocs/TechDocs build (DESIGN-0002), so it must stay CommonMark + GFM.
+# MkDocs admonitions (`!!! note`) and collapsibles (`??? note`) render as
+# literal text in every other engine. The pattern is anchored to line start
+# with a following space so prose *about* the syntax doesn't trip it; the
+# pymdownx extension list lives in mkdocs.yml, not in docs/.
+[group('lint')]
+lint-md:
+    @markdownlint-cli2 "docs/**/*.md"
+    @if grep -rEn '^[[:space:]]*(!!!|\?\?\?)[[:space:]]' docs/ --include="*.md"; then \
+        echo "✗ MkDocs-only admonition syntax in docs/ — keep it CommonMark + GFM"; \
+        exit 1; \
+    fi
+    @echo "✓ Markdown lint passed"
+
 # Format code with gofmt + goimports
 [group('lint')]
 fmt:
@@ -142,15 +158,23 @@ fmt:
 
 # ─── License compliance ─────────────────────────────────────────────
 
-# Check dependency licenses against the allow list
+# Check dependency licenses against the allow list.
+# GOTOOLCHAIN=local is load-bearing: under the default `auto`, a go on PATH
+# older than go.mod's directive silently switches to a downloaded toolchain,
+# and the `go list` that go-licenses shells out to then reports stdlib
+# packages under golang.org/toolchain@... instead of GOROOT. go-licenses
+# v1.6.0 treats that as "no module info" and dies. CI dodges it because
+# actions/setup-go sets GOTOOLCHAIN=local; do the same here so `just ci`
+# behaves identically. If the pinned go is stale this now fails loudly with
+# a version mismatch — run `mise install`.
 [group('license')]
 license-check:
-    @go-licenses check ./... --allowed_licenses={{ allowed_licenses }}
+    @GOTOOLCHAIN=local go-licenses check ./... --allowed_licenses={{ allowed_licenses }}
 
 # Generate CSV report of all dependency licenses
 [group('license')]
 license-report:
-    @go-licenses report ./... --template=.github/licenses-csv.tpl
+    @GOTOOLCHAIN=local go-licenses report ./... --template=.github/licenses-csv.tpl
 
 # ─── Release ────────────────────────────────────────────────────────
 

@@ -7,4 +7,8 @@
     "github>donaldgifford/renovate-config:mise",
     "github>donaldgifford/renovate-config:ci",
   ],
+  // PR Label Check (.github/workflows/pr-labels.yml) requires exactly one of
+  // major/minor/patch/dont-release on every PR. addLabels appends, so the
+  // preset's "dependencies" label survives; plain "labels" would replace it.
+  addLabels: ["patch"],
 }

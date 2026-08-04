@@ -1,5 +1,11 @@
 # booty
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/donaldgifford/booty.svg)](https://pkg.go.dev/github.com/donaldgifford/booty)
+[![CI](https://github.com/donaldgifford/booty/actions/workflows/ci.yml/badge.svg)](https://github.com/donaldgifford/booty/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/donaldgifford/booty/branch/main/graph/badge.svg)](https://codecov.io/gh/donaldgifford/booty)
+[![Go Report Card](https://goreportcard.com/badge/github.com/donaldgifford/booty)](https://goreportcard.com/report/github.com/donaldgifford/booty)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 A Go library for building network-boot services — proxyDHCP, TFTP, iPXE,
 identity matching, and config rendering — plus `booty`, the reference binary
 built from it.
@@ -25,7 +31,7 @@ v0 semver: the API may still move.
 
 | Package      | What it does                                                                                                    |
 | ------------ | --------------------------------------------------------------------------------------------------------------- |
-| `catalog/`   | Identity → group → profile matching, authored in HCL (variables, expressions, functions) via a `Source` seam    |
+| `catalog/`   | Identity → group → profile matching, authored in HCL (variables, expressions, functions) via `DirSource`                 |
 | `render/`    | `text/template` pipeline for every output: iPXE scripts, Talos machineconfig, cloud-init, Proxmox `answer.toml` |
 | `httpsrv/`   | Stdlib-only HTTP serving core: boot scripts, boot assets, and all config endpoints, dependency-gated routing    |
 | `tftp/`      | Read-only TFTP server from raw UDP (RFC 1350 + blksize/tsize/timeout negotiation, traversal guard)              |
@@ -38,7 +44,7 @@ for genuinely private helpers.
 ```go
 cat, err := catalog.DirSource{Root: "catalog/"}.Load(ctx)
 renderer, err := render.New() // render.WithTemplates(os.DirFS(dir)) overlays the embedded templates
-srv := httpsrv.New(httpsrv.Options{Catalog: cat, Renderer: renderer, BootDir: "boot/"})
+srv, err := httpsrv.New(httpsrv.Config{Catalog: cat, Renderer: renderer, BootDir: "boot/"})
 err = srv.ListenAndServe(ctx, ":8080")
 ```
 
@@ -105,6 +111,28 @@ image to GHCR (label `dont-release` to skip). Multi-arch (linux+darwin ×
 amd64+arm64) archives with SBOMs and signed checksums land on the release page.
 Version metadata (`version`, `commit`, `date`) is embedded via `-ldflags`;
 `booty version` prints it.
+
+### Verifying a release
+
+`checksums.txt` is signed with the release key, whose public half is committed
+as [`docs/booty-release.pub.asc`](docs/booty-release.pub.asc):
+
+```text
+C47D 59D8 6FC2 4BAE C5BB  3271 2E2C EA0B C2BD 8D59
+```
+
+Verify the signature, then the archive against the checksum it covers — the
+signature only attests to `checksums.txt`, so skipping the second step verifies
+nothing about what you downloaded:
+
+```sh
+gpg --import docs/booty-release.pub.asc
+gpg --verify checksums.txt.sig checksums.txt
+sha256sum --ignore-missing -c checksums.txt
+```
+
+Importing the key from this repo means you are trusting the repo. To do better,
+confirm the fingerprint above through a channel that isn't GitHub.
 
 ## Container
 

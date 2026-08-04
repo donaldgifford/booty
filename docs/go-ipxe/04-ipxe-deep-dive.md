@@ -36,7 +36,7 @@ In all three, the moment that matters next is: iPXE has a network and now needs 
 Here is the trap. You stand up an endpoint, point iPXE at it, and expect a request
 like:
 
-```
+```text
 GET /ipxe?mac=52:54:00:ab:cd:ef&uuid=...&arch=...
 ```
 

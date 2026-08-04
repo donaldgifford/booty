@@ -1,28 +1,3 @@
-// Package proxydhcp implements a PXE proxyDHCP (a.k.a. BINL) service: it answers
-// a PXE client's boot questions WITHOUT handing out IP addresses, so it coexists
-// with an existing DHCP server (a router, a homelab appliance) that owns the
-// leases. booty runs it so a bare NIC ROM can find and load ipxe.efi with no
-// changes to the network's DHCP.
-//
-// It implements the spec-correct two-phase PXE Boot Server Discovery from the
-// Intel PXE 2.1 specification, not the eager shortcut:
-//
-//  1. Port 67 — the client broadcasts a DHCPDISCOVER tagged option 60 =
-//     "PXEClient". The real DHCP server answers with an IP; booty answers with a
-//     *proxy* DHCPOFFER (yiaddr = 0, no bootfile) whose option 43 carries
-//     PXE_DISCOVERY_CONTROL + a PXE_BOOT_SERVERS list pointing at booty. The
-//     discovery-control byte deliberately does NOT set the "download immediately"
-//     bit, so the client is required to go to phase 2 rather than boot from the
-//     offer.
-//  2. Port 4011 (BINL) — the client unicasts a Boot Server Request to booty. booty
-//     replies with a Boot Server ACK that finally names the boot file (arch-picked
-//     ipxe.efi) in the DHCP `file` field, with siaddr = booty's IP. The client
-//     then TFTPs that file (Chapter 3) and runs it (Chapter 4).
-//
-// The socket/broadcast handling lives in ListenAndServe; the packet logic lives
-// in pure functions (parsePacket, buildProxyOffer, buildBootAck) that are unit
-// tested byte-for-byte against the spec, since real-firmware interop is exercised
-// by the QEMU e2e tier (Chapter 9).
 package proxydhcp
 
 import (
@@ -32,14 +7,17 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"sync"
 	"syscall"
 )
 
-// UDP ports in the exchange.
+// UDP ports in the exchange. Unexported: they are protocol facts, not knobs,
+// and a consumer choosing a listen address passes an address string to
+// ListenAndServe rather than reaching for a constant.
 const (
-	PortDHCP = 67   // proxy OFFER is sent here (client broadcast destination)
-	PortBoot = 68   // client listens here for replies
-	PortBINL = 4011 // Boot Server Request/ACK (BINL) port
+	portDHCP = 67   // proxy OFFER is sent here (client broadcast destination)
+	portBoot = 68   // client listens here for replies
+	portBINL = 4011 // Boot Server Request/ACK (BINL) port
 )
 
 // BOOTP op codes and DHCP message types (RFC 2131 §2, §3).
@@ -111,7 +89,8 @@ type Config struct {
 	Logger       *slog.Logger
 }
 
-// Server answers PXE proxyDHCP (port 67) and BINL (port 4011). Construct with New.
+// Server answers PXE proxyDHCP (port 67) and BINL (port 4011). Construct with
+// New: a zero Server is not usable and panics on a nil logger.
 type Server struct {
 	serverIP     net.IP
 	bootFileEFI  string
@@ -162,13 +141,8 @@ func (s *Server) ListenAndServe(ctx context.Context, dhcpAddr, binlAddr string) 
 	s.logger.Info("proxyDHCP listening", "dhcp_addr", dhcpConn.LocalAddr(),
 		"binl_addr", binlConn.LocalAddr(), "server_ip", s.serverIP)
 
-	// Cancelling ctx closes both sockets, unblocking the ReadFrom loops.
-	go func() {
-		<-ctx.Done()
-		_ = dhcpConn.Close()
-		_ = binlConn.Close()
-	}()
-
+	// Each serve call closes its own conn when ctx is done, so no closer is
+	// needed here; the deferred Closes above are the backstop.
 	errc := make(chan error, 2)
 	go func() { errc <- s.serve(ctx, dhcpConn, s.handleDHCP) }()
 	go func() { errc <- s.serve(ctx, binlConn, s.handleBINL) }()
@@ -180,28 +154,56 @@ func (s *Server) ListenAndServe(ctx context.Context, dhcpAddr, binlAddr string) 
 	return err
 }
 
-// Serve reads packets off conn and dispatches each to handle until ctx is done.
-// It is the testable seam: a caller can pass any net.PacketConn.
-func (s *Server) Serve(ctx context.Context, conn net.PacketConn, binl bool) error {
-	if binl {
-		return s.serve(ctx, conn, s.handleBINL)
-	}
+// ServeDHCP answers phase-1 PXE traffic on conn until ctx is done: a broadcast
+// DHCPDISCOVER tagged PXEClient gets a proxy OFFER that steers the client to
+// booty without offering it an address. Anything else is ignored, so the real
+// DHCP server keeps owning leases.
+//
+// It is one of the two testable seams (with [Server.ServeBINL]): a caller can
+// pass any net.PacketConn, which is what lets tests bind 127.0.0.1:0 instead of
+// the privileged broadcast socket [Server.ListenAndServe] needs.
+func (s *Server) ServeDHCP(ctx context.Context, conn net.PacketConn) error {
 	return s.serve(ctx, conn, s.handleDHCP)
 }
 
+// ServeBINL answers phase-2 PXE traffic on conn until ctx is done: a unicast
+// Boot Server Request gets an ACK naming the arch-appropriate iPXE binary.
+//
+// This is a separate method rather than a bool argument because the two phases
+// are different protocols on different ports, and `Serve(ctx, conn, true)` at a
+// call site says nothing about which one it means.
+func (s *Server) ServeBINL(ctx context.Context, conn net.PacketConn) error {
+	return s.serve(ctx, conn, s.handleBINL)
+}
+
 func (*Server) serve(ctx context.Context, conn net.PacketConn, handle func(net.PacketConn, []byte, net.Addr)) error {
+	// Cancelling ctx closes conn, which unblocks the ReadFrom below. This lives
+	// here rather than in ListenAndServe so that the exported ServeDHCP/ServeBINL seams honour
+	// ctx too: a consumer driving Serve directly would otherwise block in
+	// ReadFrom for the life of the process.
+	go func() {
+		<-ctx.Done()
+		_ = conn.Close()
+	}()
+
+	// Replies are single writes, but joining them keeps every goroutine this
+	// function starts from outliving it.
+	var handlers sync.WaitGroup
+	defer handlers.Wait()
+
 	buf := make([]byte, 1500) // one Ethernet MTU; DHCP packets fit easily
 	for {
 		n, src, err := conn.ReadFrom(buf)
 		if err != nil {
 			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
-				return nil //nolint:nilerr // a cancelled ctx closed the conn: clean shutdown, not an error
+				// A cancelled ctx closed the conn: clean shutdown, not an error.
+				return nil
 			}
 			return fmt.Errorf("proxydhcp read: %w", err)
 		}
 		pkt := make([]byte, n)
 		copy(pkt, buf[:n])
-		go handle(conn, pkt, src)
+		handlers.Go(func() { handle(conn, pkt, src) })
 	}
 }
 
@@ -217,9 +219,9 @@ func (s *Server) handleDHCP(conn net.PacketConn, raw []byte, _ net.Addr) {
 
 	reply := s.buildProxyOffer(req)
 	// The client has no IP yet: broadcast to 255.255.255.255:68 (or the relay).
-	dst := &net.UDPAddr{IP: net.IPv4bcast, Port: PortBoot}
+	dst := &net.UDPAddr{IP: net.IPv4bcast, Port: portBoot}
 	if req.giaddr != nil && !req.giaddr.Equal(net.IPv4zero) {
-		dst = &net.UDPAddr{IP: req.giaddr, Port: PortDHCP}
+		dst = &net.UDPAddr{IP: req.giaddr, Port: portDHCP}
 	}
 	if _, err := conn.WriteTo(reply, dst); err != nil {
 		s.logger.Error("proxyDHCP offer send failed", "mac", req.mac, "err", err)

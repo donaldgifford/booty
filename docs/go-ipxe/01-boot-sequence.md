@@ -18,7 +18,7 @@ something bootable and jump to it. On a machine with no OS on disk (or set to
 network-boot first), that something arrives over the wire, and the firmware
 bootstraps itself up a ladder of increasingly capable environments:
 
-```
+```text
 NIC firmware  →  iPXE  →  Linux kernel  →  the provisioned OS
  (tiny, TFTP)   (HTTP,    (real drivers,   (Talos / Ubuntu / …)
                 scripts)   networking)
@@ -64,7 +64,7 @@ That second path is how booty drops into a network without touching the router,
 and it's a proper PXE handshake with a second exchange on port 4011, not a
 shortcut — the whole of [Chapter 2](./02-dhcp-and-pxe.md).
 
-```
+```text
 DHCP result the client ends up with:
   Your IP:      192.168.1.111
   Next server:  192.168.1.10     ← booty
@@ -81,7 +81,7 @@ With a server IP and a filename, the NIC ROM makes a **TFTP** read request (UDP
 port 69). TFTP is deliberately tiny — RFC 1350 is ten pages — because it has to fit
 in a few KB of firmware:
 
-```
+```text
 Client → :69   RRQ "ipxe.efi"
 Server → Client DATA block 1 (512 bytes)   Client → ACK 1
 Server → Client DATA block 2 (512 bytes)   Client → ACK 2
@@ -112,7 +112,7 @@ a booting machine actually runs **two** scripts:
 2. A **per-machine boot script** (served at `/ipxe?mac=…`) — dynamic, rendered from
    whatever profile booty's catalog matches for that identity.
 
-```
+```text
 iPXE → GET /boot.ipxe               (chain script: collects identity)
 iPXE → GET /ipxe?mac=…&arch=…       (booty matches identity → boot script)
 ```
@@ -170,7 +170,7 @@ assembled into the `booty` binary in [Chapter 8](./07-forge-complete.md).
 Debugging a boot is finding which transition didn't happen. This is the frame the
 field guide ([Chapter 10](./08-debugging-field-guide.md)) is built on:
 
-```
+```text
 State            Who's running     What it needs           booty endpoint
 ──────────────────────────────────────────────────────────────────────────
 POWER ON         NIC firmware      —                       —
