@@ -5,6 +5,12 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Bug Fixes
+
+- *(release)* Ship LICENSE and README in the archives
+
+## [0.0.0] - 2026-08-04
+
 ### Features
 
 - *(httpsrv)* [**breaking**] New validates BaseURL and returns an error
