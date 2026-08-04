@@ -587,11 +587,32 @@ walkthrough, which must stay guide==code.
 
 #### Success Criteria (Phase 3b)
 
-- `just ci` clean; every library package still meets the 60% coverage gate.
-- The amplification factor and the goroutine-per-RRQ growth are both measured
-  again and shown to be bounded, by tests that fail against the old code.
-- `docs/go-ipxe/` compiles as written; no snippet references a removed name.
-- `go doc` for each changed package reads correctly.
+All met.
+
+- [x] `just ci` clean; every library package still meets the 60% coverage gate.
+      Coverage after: catalog 87.8%, render 90.6%, httpsrv 82.7%, tftp 84.2%
+      (up from 75.3%), proxydhcp 73.9%. Note `just ci` needs the pinned
+      toolchain on `PATH` — see the `GOTOOLCHAIN` gotcha in `CLAUDE.md`; a shell
+      holding a stale `mise` path fails `license-check` with a version mismatch
+      that has nothing to do with licenses.
+- [x] The amplification factor and the goroutine-per-RRQ growth are both
+      measured again and shown to be bounded, by tests that fail against the old
+      code. Amplification: one 29-byte RRQ from a silent peer now draws 1 packet
+      / 15 bytes (0.5x), against `maxRetries+1` packets and ~121x before;
+      reverting the fix fails the test at 2 packets. Concurrency: 768 unanswered
+      RRQs produce 257 goroutines against a cap of 256; removing the cap fails
+      the test at 769. A third test pins that a peer which _has_ answered still
+      gets the full retry budget, so the fix cannot regress into "never
+      retransmit", which would break booty on a lossy link.
+- [x] `docs/go-ipxe/` compiles as written; no snippet references a removed name.
+      Verified by grepping every doc for the removed identifiers — the only hits
+      were the two ADRs, handled below.
+- [x] `go doc` for each changed package reads correctly. `proxydhcp` gained the
+      `# Usage` block it was missing, and `tftp` too.
+- [x] ADR-0001 and ADR-0002 both described `catalog.Source` as current fact.
+      Each gained a dated note rather than being rewritten: the decisions they
+      record are unaffected, since neither depended on the boundary being
+      spelled as an interface.
 
 ### Phase 4: Cut v0.1.0
 
