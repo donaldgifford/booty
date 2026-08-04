@@ -123,6 +123,16 @@ jobs:
             ${{ steps.meta.outputs.bake-file-tags }}
             ${{ steps.meta.outputs.bake-file-labels }}
             ${{ steps.meta.outputs.bake-file-annotations }}
+          # The build args are load-bearing, not decoration. Without them bake
+          # falls back to docker-bake.hcl's defaults, the Dockerfile bakes
+          # -X main.version=0.0.0-dev into the binary, and the released image
+          # answers `booty version` with "0.0.0-dev (commit none, built
+          # unknown)" — an image tagged 0.1.0 that cannot tell you what it is.
+          # Both values come from metadata-action so the binary and the OCI
+          # labels cannot disagree about the same image.
           set: |-
             *.cache-from=type=gha
             *.cache-to=type=gha,mode=max
+            *.args.VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
+            *.args.COMMIT=${{ github.sha }}
+            *.args.DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
