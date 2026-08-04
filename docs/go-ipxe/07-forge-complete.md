@@ -214,7 +214,7 @@ defer stop()
 var wg sync.WaitGroup
 errc := make(chan error, 3)
 
-httpServer := httpsrv.New(httpsrv.Options{
+httpServer := httpsrv.New(httpsrv.Config{
 	Logger: logger, Catalog: cat, Renderer: renderer,
 	BootDir: *bootDir, BaseURL: *baseURL, ProxmoxAuthToken: *proxmoxToken,
 })

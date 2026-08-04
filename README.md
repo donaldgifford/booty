@@ -44,7 +44,7 @@ for genuinely private helpers.
 ```go
 cat, err := catalog.DirSource{Root: "catalog/"}.Load(ctx)
 renderer, err := render.New() // render.WithTemplates(os.DirFS(dir)) overlays the embedded templates
-srv := httpsrv.New(httpsrv.Options{Catalog: cat, Renderer: renderer, BootDir: "boot/"})
+srv := httpsrv.New(httpsrv.Config{Catalog: cat, Renderer: renderer, BootDir: "boot/"})
 err = srv.ListenAndServe(ctx, ":8080")
 ```
 

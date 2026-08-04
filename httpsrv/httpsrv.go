@@ -20,10 +20,10 @@ import (
 	"github.com/donaldgifford/booty/render"
 )
 
-// Options configures a Server. Catalog/Renderer enable the iPXE endpoints;
+// Config configures a Server. Catalog/Renderer enable the iPXE endpoints;
 // BootDir enables the /boot asset endpoint. Any of them may be zero, in which
 // case the corresponding routes are simply not registered (health always is).
-type Options struct {
+type Config struct {
 	Logger   *slog.Logger
 	Catalog  *catalog.Catalog
 	Renderer *render.Renderer
@@ -49,18 +49,18 @@ type Server struct {
 }
 
 // New returns a Server. A nil logger falls back to slog.Default.
-func New(opts Options) *Server {
-	logger := opts.Logger
+func New(cfg Config) *Server {
+	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Server{
 		logger:       logger,
-		catalog:      opts.Catalog,
-		renderer:     opts.Renderer,
-		bootDir:      opts.BootDir,
-		baseURL:      strings.TrimRight(opts.BaseURL, "/"),
-		proxmoxToken: opts.ProxmoxAuthToken,
+		catalog:      cfg.Catalog,
+		renderer:     cfg.Renderer,
+		bootDir:      cfg.BootDir,
+		baseURL:      strings.TrimRight(cfg.BaseURL, "/"),
+		proxmoxToken: cfg.ProxmoxAuthToken,
 	}
 }
 

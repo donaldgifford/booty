@@ -10,7 +10,7 @@
 //   - POST /proxmox/answer — the Proxmox automated-installer answer file.
 //   - GET /boot/{path...} — kernels, initrds, and other boot assets.
 //
-// Routing is dependency-gated: each route is registered only when [Options]
+// Routing is dependency-gated: each route is registered only when [Config]
 // carries what it needs — Catalog and Renderer enable the script and config
 // endpoints, BootDir enables asset serving. Anything left zero simply has no
 // route, so a partially configured server starts and serves what it can. The
@@ -23,7 +23,7 @@
 //
 // Wire a catalog and renderer into a server and serve:
 //
-//	srv := httpsrv.New(httpsrv.Options{
+//	srv := httpsrv.New(httpsrv.Config{
 //		Catalog:  cat,
 //		Renderer: renderer,
 //		BootDir:  "/var/lib/booty/boot",

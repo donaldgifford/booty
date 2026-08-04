@@ -63,7 +63,7 @@ The wiring reuses the public seams the earlier chapters were careful to expose â
 so the test hosts booty's own code, not a reimplementation:
 
 ```go
-handler := rec.wrap(httpsrv.New(httpsrv.Options{
+handler := rec.wrap(httpsrv.New(httpsrv.Config{
 	Logger: logger, Catalog: cat, Renderer: renderer, BootDir: bootDir,
 }).Handler())
 

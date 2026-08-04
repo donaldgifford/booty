@@ -58,7 +58,7 @@ func rackHandler(b *testing.B, n int, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	return New(Options{
+	return New(Config{
 		Logger:   logger,
 		Catalog:  rackCatalog(n),
 		Renderer: r,
@@ -178,7 +178,7 @@ func BenchmarkBootAssetDownload(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	h := New(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), BootDir: dir}).Handler()
+	h := New(Config{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), BootDir: dir}).Handler()
 	srv := httptest.NewServer(h)
 	b.Cleanup(srv.Close)
 

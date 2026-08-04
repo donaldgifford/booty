@@ -152,7 +152,7 @@ func startBooty(t *testing.T, bootDir, httpAddr, tftpAddr string) *booty {
 	}
 
 	rec := &recorder{}
-	handler := rec.wrap(httpsrv.New(httpsrv.Options{
+	handler := rec.wrap(httpsrv.New(httpsrv.Config{
 		Logger: logger, Catalog: cat, Renderer: renderer, BootDir: bootDir,
 	}).Handler())
 

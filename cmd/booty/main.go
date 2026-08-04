@@ -205,7 +205,7 @@ func cmdServe(args []string) int {
 	var wg sync.WaitGroup
 	errc := make(chan error, 3)
 
-	httpServer := httpsrv.New(httpsrv.Options{
+	httpServer := httpsrv.New(httpsrv.Config{
 		Logger:           logger,
 		Catalog:          cat,
 		Renderer:         renderer,

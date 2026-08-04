@@ -26,7 +26,7 @@ func brokenCatalog() *catalog.Catalog {
 // the operator to add a group — which is what every endpoint used to do — sends
 // them to fix the one thing that is not broken.
 func TestBrokenCatalogIsNotReportedAsUnknownMachine(t *testing.T) {
-	h := newTestServer(t, Options{Catalog: brokenCatalog()})
+	h := newTestServer(t, Config{Catalog: brokenCatalog()})
 
 	t.Run("ipxe names the real fault", func(t *testing.T) {
 		body := get(t, h, "/ipxe?mac=d0:50:99:b3:4c:50&arch=x86_64").Body.String()
@@ -61,7 +61,7 @@ func TestBrokenCatalogIsNotReportedAsUnknownMachine(t *testing.T) {
 // request body, which is no more trustworthy than a query string, and the
 // endpoint requires no token unless one is configured.
 func TestProxmoxRejectsInjectedIdentity(t *testing.T) {
-	h := newTestServer(t, Options{Catalog: bootCatalog()})
+	h := newTestServer(t, Config{Catalog: bootCatalog()})
 
 	post := func(t *testing.T, body string) *httptest.ResponseRecorder {
 		t.Helper()
