@@ -16,6 +16,21 @@
 // Serving is read-only. Write requests are rejected, and paths are resolved
 // under the configured root with a traversal guard.
 //
+// # Usage
+//
+//	srv := tftp.New(tftp.Config{BootDir: "/var/lib/booty/boot"})
+//	if err := srv.ListenAndServe(ctx, ":69"); err != nil {
+//		return err
+//	}
+//
+// Port 69 is privileged. Bind a high port and redirect, or grant
+// CAP_NET_BIND_SERVICE — the distroless image runs as UID 65532 and cannot bind
+// it unaided.
+//
+// [Server.Serve] takes an already-bound net.PacketConn instead, which is what
+// makes the server testable: bind 127.0.0.1:0, read the port back from
+// conn.LocalAddr, and cancel ctx to shut down.
+//
 // Wire-level walkthrough:
 // https://github.com/donaldgifford/booty/blob/main/docs/go-ipxe/03-tftp-from-scratch.md
 package tftp

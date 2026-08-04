@@ -31,7 +31,7 @@ func startServer(t *testing.T, bootDir string) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		_ = New(bootDir, quietLogger()).Serve(ctx, conn)
+		_ = New(Config{BootDir: bootDir, Logger: quietLogger()}).Serve(ctx, conn)
 		close(done)
 	}()
 	t.Cleanup(func() {
@@ -180,7 +180,7 @@ func TestServeDrainsInFlightTransfer(t *testing.T) {
 	defer cancel()
 	served := make(chan struct{})
 	go func() {
-		_ = New(bootDir, quietLogger()).Serve(ctx, conn)
+		_ = New(Config{BootDir: bootDir, Logger: quietLogger()}).Serve(ctx, conn)
 		close(served)
 	}()
 
@@ -412,7 +412,7 @@ func TestParseRRQ(t *testing.T) {
 
 func TestResolvePathTraversal(t *testing.T) {
 	dir := t.TempDir()
-	s := New(dir, quietLogger())
+	s := New(Config{BootDir: dir, Logger: quietLogger()})
 	abs, _ := filepath.Abs(dir)
 
 	tests := []struct {

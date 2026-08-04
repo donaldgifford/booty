@@ -50,6 +50,16 @@ const (
 	maxRetries      = 3
 )
 
+// Config configures a Server.
+type Config struct {
+	// BootDir is the directory files are served from. Every request is resolved
+	// under it; see resolvePath for what that guarantee is and is not.
+	BootDir string
+	// Logger receives transfer and error events. Nil falls back to slog.Default
+	// so library callers are never forced to thread one.
+	Logger *slog.Logger
+}
+
 // Server serves files from a boot directory over TFTP. A zero Server is not
 // usable; construct one with New. It is safe for concurrent transfers: each
 // request is handled on its own goroutine and its own socket.
@@ -58,13 +68,13 @@ type Server struct {
 	logger  *slog.Logger
 }
 
-// New returns a Server that serves files rooted at bootDir. A nil logger falls
-// back to slog.Default so library callers are never forced to thread one.
-func New(bootDir string, logger *slog.Logger) *Server {
+// New returns a Server serving files rooted at cfg.BootDir.
+func New(cfg Config) *Server {
+	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Server{bootDir: bootDir, logger: logger}
+	return &Server{bootDir: cfg.BootDir, logger: logger}
 }
 
 // ListenAndServe binds a UDP socket to addr and serves until ctx is cancelled.

@@ -72,7 +72,7 @@ srv := &http.Server{Handler: handler}
 go srv.Serve(ln)
 
 pc, _ := net.ListenPacket("udp", "127.0.0.1:0")  // ephemeral UDP port
-go tftp.New(bootDir, logger).Serve(ctx, pc)      // booty's real TFTP server
+go tftp.New(tftp.Config{BootDir: bootDir, Logger: logger}).Serve(ctx, pc)      // booty's real TFTP server
 ```
 
 The catalog it loads is the *shipped example* (`examples/catalog`), so the test

@@ -224,7 +224,7 @@ wg.Go(func() {
 	}
 })
 wg.Go(func() {
-	if err := tftp.New(*bootDir, logger).ListenAndServe(ctx, *tftpAddr); err != nil {
+	if err := tftp.New(tftp.Config{BootDir: *bootDir, Logger: logger}).ListenAndServe(ctx, *tftpAddr); err != nil {
 		errc <- fmt.Errorf("tftp: %w", err)
 	}
 })

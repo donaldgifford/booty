@@ -22,7 +22,7 @@ func benchServer(b *testing.B, bootDir string) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		_ = New(bootDir, quietLogger()).Serve(ctx, conn)
+		_ = New(Config{BootDir: bootDir, Logger: quietLogger()}).Serve(ctx, conn)
 		close(done)
 	}()
 	b.Cleanup(func() {

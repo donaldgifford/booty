@@ -219,7 +219,7 @@ func cmdServe(args []string) int {
 		}
 	})
 	wg.Go(func() {
-		if err := tftp.New(c.bootDir, logger).ListenAndServe(ctx, c.tftpAddr); err != nil {
+		if err := tftp.New(tftp.Config{BootDir: c.bootDir, Logger: logger}).ListenAndServe(ctx, c.tftpAddr); err != nil {
 			errc <- fmt.Errorf("tftp: %w", err)
 		}
 	})

@@ -24,7 +24,7 @@ func TestFanoutHoldsSocketsPerUnansweredRRQ(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { _ = New(dir, quietLogger()).Serve(ctx, conn); close(done) }()
+	go func() { _ = New(Config{BootDir: dir, Logger: quietLogger()}).Serve(ctx, conn); close(done) }()
 	addr := conn.LocalAddr()
 
 	base := runtime.NumGoroutine()

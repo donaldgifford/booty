@@ -170,7 +170,7 @@ func startBooty(t *testing.T, bootDir, httpAddr, tftpAddr string) *booty {
 		t.Fatalf("tftp listen %s: %v", tftpAddr, err)
 	}
 	tctx, tcancel := context.WithCancel(context.Background())
-	go func() { _ = tftp.New(bootDir, logger).Serve(tctx, pc) }()
+	go func() { _ = tftp.New(tftp.Config{BootDir: bootDir, Logger: logger}).Serve(tctx, pc) }()
 
 	t.Cleanup(func() {
 		sctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
