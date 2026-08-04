@@ -42,6 +42,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* Record what Phase 4 pre-flight has already verified
 - *(impl)* Record the first measured performance data
 - *(impl)* Record OQ-7a/OQ-8a and add Phase 3b
+- Reconcile the ADRs with the Phase 3b API and document proxydhcp usage
 
 ### Performance
 
