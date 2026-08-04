@@ -43,6 +43,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* Record the first measured performance data
 - *(impl)* Record OQ-7a/OQ-8a and add Phase 3b
 - Reconcile the ADRs with the Phase 3b API and document proxydhcp usage
+- *(impl)* Record Phase 3b as complete with the measured results
 
 ### Performance
 
