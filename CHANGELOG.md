@@ -10,6 +10,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Add an Install section, and fix the release-note grouping
 - Close out IMPL-0001 and DESIGN-0001
 - *(impl)* Record the main ruleset as it actually is
+- *(impl)* Codecov and Renovate are enabled
 
 ## [0.1.1] - 2026-08-04
 
