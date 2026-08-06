@@ -133,15 +133,18 @@ workflow fails every PR until they exist, so nothing else can merge.
       carries the fingerprint plus the two-step verify (signature over
       `checksums.txt`, then archive against checksum) — verifying only the
       signature attests to nothing about the archive you downloaded.
-- [ ] **(Donald)** Enable the repo on Codecov and `gh secret set CODECOV_TOKEN`.
+- [x] **(Donald)** Enable the repo on Codecov and `gh secret set CODECOV_TOKEN`.
+      Done 2026-08-06; `gh secret list` now shows all three secrets.
 - [x] Confirm Dependabot alerts are enabled (the `dependabot-severity-label`
       workflow depends on them) —
       `gh api /repos/donaldgifford/booty/vulnerability-alerts` returns 204.
-- [ ] **(Donald)** Confirm the Renovate app covers the repo: no onboarding PR
-      and no Dependency Dashboard issue exist yet, so either the app is not
-      installed on `booty` or it has not run (the shared preset schedules
-      "before 6am on monday"). Install/verify at
-      <https://github.com/apps/renovate>.
+- [x] **(Donald)** Confirm the Renovate app covers the repo. Installed
+      2026-08-06. No onboarding PR or Dependency Dashboard issue has appeared
+      yet, which is expected rather than wrong: the shared preset schedules
+      "before 6am on monday", so the first run is pending its window.
+      `renovate.json5` validates against the schema and already carries the
+      `addLabels: ["patch"]` fix, so the first PR should satisfy `PR Label
+      Check` without intervention — that is the thing to watch when it lands.
 - [x] Add `addLabels: ["patch"]` to `renovate.json5` (OQ-1) so Renovate PRs
       arrive pre-labeled and pass the label check; the rare major-worthy bump
       gets relabeled by hand before merge. **Corrected mechanism:** the shared
@@ -805,18 +808,16 @@ Everything in Phases 2–5 is done and v0.1.1 is released and validated. What is
 left needs an account or a policy call that is the owner's to make. None of it
 blocks the release; all of it is hardening.
 
-- **Codecov** (Phase 1, and the Phase 3 verification that depends on it).
-  Enabling the repo and setting `CODECOV_TOKEN` needs a Codecov login. Until
-  then the upload step runs and no-ops — it has `CC_FAIL_ON_ERROR: false`, so it
-  can neither fail the build nor report, which is the quiet kind of broken. The
-  coverage gate itself does not depend on Codecov and is enforced in CI today:
-  catalog 87.8%, render 90.6%, httpsrv 82.7%, tftp 84.2%, proxydhcp 73.9%
-  against a 60% floor.
-- **Renovate.** No onboarding PR and no Dependency Dashboard issue exist, so
-  either the app is not installed on this repo or it has not run — the shared
-  preset schedules "before 6am on monday". Installing it needs GitHub app
-  permissions. `renovate.json5` is already correct and validated, so the first
-  run should need no follow-up.
+- **Renovate's first run.** The app is installed as of 2026-08-06 but has not
+  run yet — the shared preset schedules "before 6am on monday", so nothing is
+  wrong, it is simply waiting for its window. `renovate.json5` validates and
+  carries the `addLabels: ["patch"]` fix, so the first PR should pass `PR Label
+  Check` unaided; that is the thing to confirm when it appears.
+
+  Note the coverage gate never depended on Codecov and has been enforced in CI
+  throughout: catalog 87.8%, render 90.6%, httpsrv 82.7%, tftp 84.2%, proxydhcp
+  73.9% against a 60% floor. Codecov adds reporting and PR comments, not the
+  gate.
 - **The `main` ruleset is active but partial.** It blocks deletion and
   force-pushes — the two things that cannot be undone. It does not require
   status checks or a PR before merge, so Phase 3's "required checks enforced, no
