@@ -317,10 +317,17 @@ just wrote.
       an anchored MkDocs-admonition guard) and fixed all 49 violations across 13
       files. Now **0 errors across 24 files**. See the Blocked section below for
       the full accounting and why `Build Starlight` was left alone.
-- [ ] **Blocked (Donald).** Verify the Codecov upload succeeds with the new
-      token and the PR gets a coverage comment. The step runs today but no-ops:
-      `CODECOV_TOKEN` is unset and the action has `CC_FAIL_ON_ERROR: false`, so
-      it cannot fail the build or report.
+- [x] Verify the Codecov upload succeeds with the new token and the PR gets a
+      coverage comment. Before the secret existed this step ran but no-opped:
+      `CODECOV_TOKEN` was unset and the action has `CC_FAIL_ON_ERROR: false`, so
+      it could neither report nor fail the build — the quiet kind of broken.
+      Verified end to end on PR #9's own CI run (commit `c919da9`): the action
+      logged `Token length: 36` and `CLI integrity verified`, uploaded
+      `coverage.out`, and the Codecov API now returns `"state": "complete"` for
+      that commit — 7 files, 1208 lines, **70.03%** aggregate. `codecov-commenter`
+      posted on the PR. The aggregate sits below every per-package figure because
+      it includes `cmd/booty` at 18.5%; the 60% floor is per-package and is
+      enforced by `just coverage-gate`, not by Codecov.
 - [x] Merge; verify post-merge jobs on `main`: the `ci` bake validation and the
       changelog workflow run clean. The `Build Starlight` blocker was removed
       first by gating that job on `site/package.json` existing, so it skips
@@ -814,10 +821,11 @@ blocks the release; all of it is hardening.
   carries the `addLabels: ["patch"]` fix, so the first PR should pass `PR Label
   Check` unaided; that is the thing to confirm when it appears.
 
-  Note the coverage gate never depended on Codecov and has been enforced in CI
-  throughout: catalog 87.8%, render 90.6%, httpsrv 82.7%, tftp 84.2%, proxydhcp
-  73.9% against a 60% floor. Codecov adds reporting and PR comments, not the
-  gate.
+  Codecov itself is no longer pending — PR #9's run uploaded, Codecov processed
+  the report, and the PR got a comment (see Phase 3). Note the coverage gate
+  never depended on Codecov and has been enforced in CI throughout: catalog
+  87.8%, render 90.6%, httpsrv 82.7%, tftp 84.2%, proxydhcp 73.9% against a 60%
+  floor. Codecov adds reporting and PR comments, not the gate.
 - **The `main` ruleset is active but partial.** It blocks deletion and
   force-pushes — the two things that cannot be undone. It does not require
   status checks or a PR before merge, so Phase 3's "required checks enforced, no
