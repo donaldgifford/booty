@@ -11,6 +11,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Close out IMPL-0001 and DESIGN-0001
 - *(impl)* Record the main ruleset as it actually is
 - *(impl)* Codecov and Renovate are enabled
+- *(impl)* Record the verified Codecov upload
 
 ## [0.1.1] - 2026-08-04
 
