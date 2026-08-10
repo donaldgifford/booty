@@ -178,8 +178,10 @@ workflow fails every PR until they exist, so nothing else can merge.
 - Renovate PRs arrive pre-labeled and pass the label check without manual
   intervention. **Observed 2026-08-10, and it failed 4 of 5.** The criterion as
   written ("pre-labeled `patch`") was itself the mistake — the upstream presets
-  label per manager, and only gomod bumps should be `patch`. See OQ-1's
-  correction for the diagnosis and the fix; re-verified below.
+  label per manager, and only gomod bumps should be `patch`. OQ-1 has the
+  diagnosis; the config is fixed and all five PRs now pass, though the four
+  corrected by hand mean the config's own behaviour is inferred until Renovate's
+  next pass. See "Remaining owner-gated work".
 
 ---
 
@@ -841,10 +843,35 @@ blocks the release; all of it is hardening.
   diagnosis. The blanket rule is deleted and replaced with one narrow rule for
   `renovate.json5` itself, the only file no preset covers.
 
-  Re-verification is mechanical and is the remaining step: once the fix is on
-  `main`, Renovate rewrites the labels on its next pass, or the four PRs can be
-  relabeled by hand (drop `patch`, keep `dont-release`) to unblock them now.
-  What to confirm is one semver label per PR and `Check Required Labels` green.
+  The fix is on `main` and the four PRs were relabeled by hand (drop `patch`,
+  keep `dont-release`). All five now pass `Check Required Labels`:
+
+  | PR  | Manager        | Labels                          | Check |
+  | --- | -------------- | ------------------------------- | ----- |
+  | #11 | gomod          | `dependencies`, `patch`         | pass  |
+  | #12 | dockerfile     | `dependencies`, `dont-release`  | pass  |
+  | #13 | github-actions | `ci`, `dependencies`, `dont-release` | pass |
+  | #14 | mise           | `dependencies`, `dont-release`  | pass  |
+  | #15 | actions/cache  | `ci`, `dependencies`, `dont-release` | pass |
+
+  One thing is still inferred rather than observed: that Renovate _itself_ now
+  applies these labels. The four were corrected by hand, so what is proven is
+  the label check's behaviour, not the config's. The existing PRs are the test —
+  Renovate reconciles labels on every pass, so if the fix is right they stay as
+  above, and if it is wrong `patch` reappears and they go red again. No action
+  needed either way; just look after the next window.
+
+- **Two Renovate PRs fail on their own bump, unrelated to labels.** #13
+  (golangci-lint 2.11.4 → 2.12.2) trips 12 `goconst` findings on strings like
+  `mac`, `arch` and `hostname` — HCL attribute names and template keys, where a
+  constant would likely read worse than the literal — plus one real
+  `nolintlint`: the `//nolint:gosec` at `proxydhcp/proxydhcp.go:470` is dead
+  under the new version. #14 (markdownlint-cli2 0.18.1 → 0.23.2) trips the new
+  MD060 on `docs/*/README.md`, which docz generates with unaligned table pipes.
+
+  Both are coupled to their own bump — removing that `nolint` today would fail
+  lint under the pinned 2.11.4 — so each is fixed in its own PR or the rule is
+  turned off, whichever the owner prefers. Neither blocks anything released.
 
 - **Codecov is no longer pending.** PR #9's run uploaded, Codecov processed the
   report (`state: complete`, 70.03% across 7 files), and the PR got a comment —
