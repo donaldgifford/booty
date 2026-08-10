@@ -16,6 +16,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* Record the main ruleset as it actually is
 - Record Codecov and Renovate as enabled ([#9](https://github.com/donaldgifford/booty/issues/9))
 - *(impl)* Record what Renovate actually resolved
+- Record the conflicting-PR and Renovate-label traps in CLAUDE.md
 
 ## [0.1.1] - 2026-08-04
 
