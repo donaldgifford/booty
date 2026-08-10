@@ -15,6 +15,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Close out IMPL-0001 and DESIGN-0001
 - *(impl)* Record the main ruleset as it actually is
 - Record Codecov and Renovate as enabled ([#9](https://github.com/donaldgifford/booty/issues/9))
+- *(impl)* Record the Renovate label verification
 
 ## [0.1.1] - 2026-08-04
 
