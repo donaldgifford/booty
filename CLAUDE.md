@@ -146,6 +146,16 @@ the cache layers.
   both the Starlight site and a future MkDocs build (DESIGN-0002).
   Prettier and docz fight over `docs/*/README.md`, so those are in
   `.prettierignore`; docz owns them.
+- **A conflicting PR runs no checks at all** — and it looks nothing like
+  a merge problem. GitHub cannot compute a merge commit, so every
+  `pull_request`-triggered workflow is simply never queued: `gh pr
+  checks` shows one or two `pull_request_target` jobs and nothing else,
+  as though CI were broken. Check `gh pr view N --json mergeable`
+  before debugging the workflows. In this repo the usual cause is
+  `CHANGELOG.md`: `Changelog Regen` auto-pushes a regenerated changelog
+  to `main` after every merge, so any branch that also regenerated one
+  conflicts as soon as something else merges. Rebase, `--skip` your own
+  changelog commits, and regenerate once at the end.
 
 ## Renovate
 
@@ -153,3 +163,16 @@ the cache layers.
 - Container base images in `Dockerfile` are PR'd by the Docker manager.
 - `mise.toml` versions are handled by a custom regex manager configured
   upstream in `donaldgifford/renovate-config`.
+- **Semver labels come from the presets, not from here.** `PR Label
+  Check` needs exactly one of `major`/`minor`/`patch`/`dont-release`,
+  and the `:go`, `:ci`, `:docker` and `:mise` presets each already add
+  one for their own manager (go → `patch`; ci/docker/mise →
+  `dont-release`). Do not add a repo-wide `addLabels` semver label:
+  `addLabels` appends, so it stacks a second label and the check fails
+  on two exactly as it does on zero. That bug shipped once already —
+  IMPL-0001 OQ-1 has the post-mortem. A new manager with no preset rule
+  is the opposite failure (zero labels); give it a narrow
+  `matchFileNames` rule, as `renovate.json5` itself has.
+- Validate with `renovate-config-validator` run **with no arguments**
+  from the repo root. Passing the filename explicitly makes it validate
+  the file as *global* config, which passes almost anything.

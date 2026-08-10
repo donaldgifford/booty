@@ -7,8 +7,27 @@
     "github>donaldgifford/renovate-config:mise",
     "github>donaldgifford/renovate-config:ci",
   ],
-  // PR Label Check (.github/workflows/pr-labels.yml) requires exactly one of
-  // major/minor/patch/dont-release on every PR. addLabels appends, so the
-  // preset's "dependencies" label survives; plain "labels" would replace it.
-  addLabels: ["patch"],
+  // PR Label Check (.github/workflows/pr-labels.yml) requires *exactly* one of
+  // major/minor/patch/dont-release. The presets above already supply one per
+  // manager — go: patch (minor for majors and the go directive itself); ci,
+  // docker and mise: dont-release, since none of them change shipped code.
+  //
+  // A blanket `addLabels: ["patch"]` used to live here. It was wrong: addLabels
+  // appends, so every ci/docker/mise PR ended up with dont-release *and* patch
+  // — two labels, and `mode: exactly, count: 1` fails on two just as it does on
+  // zero. PRs #12-#15 failed the check that way; #11 passed only because gomod's
+  // preset label is already `patch`, so the duplicate deduped. See IMPL-0001
+  // OQ-1.
+  //
+  // The one file no preset covers is this one, so it gets a rule. Matching by
+  // filename rather than by manager id deliberately: the dashboard renders the
+  // manager as "renovate-config" but Renovate's internal id is
+  // "renovate-config-presets", and a matchManagers typo fails open — no label,
+  // and a red PR nobody can merge.
+  packageRules: [
+    {
+      matchFileNames: ["renovate.json5"],
+      addLabels: ["dont-release"],
+    },
+  ],
 }

@@ -139,12 +139,19 @@ workflow fails every PR until they exist, so nothing else can merge.
       workflow depends on them) —
       `gh api /repos/donaldgifford/booty/vulnerability-alerts` returns 204.
 - [x] **(Donald)** Confirm the Renovate app covers the repo. Installed
-      2026-08-06. No onboarding PR or Dependency Dashboard issue has appeared
-      yet, which is expected rather than wrong: the shared preset schedules
-      "before 6am on monday", so the first run is pending its window.
-      `renovate.json5` validates against the schema and already carries the
-      `addLabels: ["patch"]` fix, so the first PR should satisfy `PR Label
-      Check` without intervention — that is the thing to watch when it lands.
+      2026-08-06, and it has run: `renovate-operator-bot` opened the
+      [Dependency Dashboard](https://github.com/donaldgifford/booty/issues/8)
+      the same day. All five managers resolved — dockerfile (3 deps),
+      github-actions (11 workflows), gomod (3), mise (8), and the
+      `renovate-config` manager reading `renovate.json5` itself — with 14 update
+      branches queued behind the preset's "before 6am on monday" window. The
+      `mise.toml` custom regex manager is worth calling out: it is configured
+      upstream in `donaldgifford/renovate-config` rather than here, so "does it
+      actually match this repo's `mise.toml`?" was an open question. It matched
+      all 8 pinned tools.
+
+      What is *not* yet observed is a real PR carrying the labels — see the
+      Phase 1 criteria below and "Remaining owner-gated work".
 - [x] Add `addLabels: ["patch"]` to `renovate.json5` (OQ-1) so Renovate PRs
       arrive pre-labeled and pass the label check; the rare major-worthy bump
       gets relabeled by hand before merge. **Corrected mechanism:** the shared
@@ -168,8 +175,11 @@ workflow fails every PR until they exist, so nothing else can merge.
   `CODECOV_TOKEN`; `docs/booty-release.pub.asc` is committed.
 - The test PR passes `PR Label Check`, gets auto-labeled by path, and triggers
   every CI job (outcomes fixed in Phase 3).
-- Renovate PRs arrive pre-labeled `patch` and pass the label check without
-  manual intervention.
+- Renovate PRs arrive pre-labeled and pass the label check without manual
+  intervention. **Observed 2026-08-10, and it failed 4 of 5.** The criterion as
+  written ("pre-labeled `patch`") was itself the mistake — the upstream presets
+  label per manager, and only gomod bumps should be `patch`. See OQ-1's
+  correction for the diagnosis and the fix; re-verified below.
 
 ---
 
@@ -815,17 +825,33 @@ Everything in Phases 2–5 is done and v0.1.1 is released and validated. What is
 left needs an account or a policy call that is the owner's to make. None of it
 blocks the release; all of it is hardening.
 
-- **Renovate's first run.** The app is installed as of 2026-08-06 but has not
-  run yet — the shared preset schedules "before 6am on monday", so nothing is
-  wrong, it is simply waiting for its window. `renovate.json5` validates and
-  carries the `addLabels: ["patch"]` fix, so the first PR should pass `PR Label
-  Check` unaided; that is the thing to confirm when it appears.
+- **Renovate's first PR.** Renovate itself is confirmed working: it resolved
+  every manager and filed the Dependency Dashboard (issue #8) on 2026-08-06,
+  with 14 branches queued behind the preset's "before 6am on monday" window.
+  The one thing still unobserved is a PR — specifically whether `addLabels:
+  ["patch"]` lands `dependencies` + `patch` on it, giving `PR Label Check`
+  exactly one semver label. That is a prediction from reading the config, and
+  the config has already surprised us once (OQ-1's original `labels` answer was
+  wrong because `labels` replaces rather than appends).
 
-  Codecov itself is no longer pending — PR #9's run uploaded, Codecov processed
-  the report, and the PR got a comment (see Phase 3). Note the coverage gate
-  never depended on Codecov and has been enforced in CI throughout: catalog
-  87.8%, render 90.6%, httpsrv 82.7%, tftp 84.2%, proxydhcp 73.9% against a 60%
-  floor. Codecov adds reporting and PR comments, not the gate.
+  **Resolved 2026-08-10 — and it revealed a real bug.** The Monday window
+  opened five PRs; four failed `Check Required Labels` because the repo-local
+  blanket `addLabels: ["patch"]` stacked a second semver label on top of the
+  `dont-release` the ci/docker/mise presets already apply. OQ-1 carries the full
+  diagnosis. The blanket rule is deleted and replaced with one narrow rule for
+  `renovate.json5` itself, the only file no preset covers.
+
+  Re-verification is mechanical and is the remaining step: once the fix is on
+  `main`, Renovate rewrites the labels on its next pass, or the four PRs can be
+  relabeled by hand (drop `patch`, keep `dont-release`) to unblock them now.
+  What to confirm is one semver label per PR and `Check Required Labels` green.
+
+- **Codecov is no longer pending.** PR #9's run uploaded, Codecov processed the
+  report (`state: complete`, 70.03% across 7 files), and the PR got a comment —
+  see Phase 3. Note the coverage gate never depended on Codecov and has been
+  enforced in CI throughout: catalog 87.8%, render 90.6%, httpsrv 82.7%, tftp
+  84.2%, proxydhcp 73.9% against a 60% floor. Codecov adds reporting and PR
+  comments, not the gate.
 - **The `main` ruleset is active but partial.** It blocks deletion and
   force-pushes — the two things that cannot be undone. It does not require
   status checks or a PR before merge, so Phase 3's "required checks enforced, no
@@ -919,6 +945,50 @@ already sets `labels: ["dependencies"]`; Renovate's `labels` replaces rather
 than appends, so a local `labels` key would silently drop `dependencies`.
 `addLabels` is mergeable and preserves both. Same intent, non-destructive
 mechanism.
+
+**Correction (2026-08-10): the decision was wrong, and the first real PRs proved
+it.** Renovate's Monday window opened five PRs (#11-#15). One passed the label
+check; four failed.
+
+The premise of the whole question — "`renovate.json5` only `extends` the
+upstream preset, no labels" — was false. It was true of `default.json`, but this
+repo also extends `:go`, `:docker`, `:mise` and `:ci`, and _each of those
+already assigns a semver label per manager_:
+
+| Preset      | Manager                       | Label          |
+| ----------- | ----------------------------- | -------------- |
+| `go.json`   | gomod, minor/patch/digest     | `patch`        |
+| `go.json`   | gomod major, and `go` itself  | `minor`        |
+| `ci.json`   | github-actions, `.github/**`  | `dont-release` |
+| `docker.json` | dockerfile, docker-compose  | `dont-release` |
+| `mise.json` | mise                          | `dont-release` |
+
+So the problem OQ-1 set out to solve did not exist, and the fix for it created
+one. `addLabels` appends unconditionally, so the blanket `patch` stacked on top
+of the `dont-release` those presets had already applied. `mode: exactly,
+count: 1` fails on two labels exactly as it fails on zero:
+
+- #11 (gomod, `dependencies`/`patch`) — **passed**, by coincidence: gomod's
+  preset label already _is_ `patch`, so the duplicate deduped away.
+- #12 dockerfile, #13 github-actions, #14 mise, #15 actions/cache — all
+  `dependencies`/`dont-release`/`patch`, all **failed**.
+
+Read another way, option **b** ("add the default in the upstream preset") was
+already done before the question was asked. The right answer was **d, none of
+the above** — nothing needed adding here.
+
+Fixed by deleting the blanket rule. The single gap left is `renovate.json5`
+itself, which no preset covers, so it gets one narrow rule keyed on
+`matchFileNames` rather than `matchManagers` — the dashboard renders that
+manager as `renovate-config` while Renovate's internal id is
+`renovate-config-presets`, and a `matchManagers` typo fails _open_: no label,
+and a PR nobody can merge. Validated with `renovate-config-validator` in repo
+mode (passing a path explicitly makes it validate as _global_ config, which
+always passes and proves nothing).
+
+The generalisable lesson is that this was verifiable by reading five preset
+files at any point in the last week, and instead it was reasoned about from the
+name of one of them.
 
 ### OQ-2: Scope of the `# Usage` examples in doc.go
 

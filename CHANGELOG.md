@@ -5,12 +5,18 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Bug Fixes
+
+- *(renovate)* Stop stacking a second semver label on every PR
+
 ### Documentation
 
 - Add an Install section, and fix the release-note grouping
 - Close out IMPL-0001 and DESIGN-0001
 - *(impl)* Record the main ruleset as it actually is
 - Record Codecov and Renovate as enabled ([#9](https://github.com/donaldgifford/booty/issues/9))
+- *(impl)* Record what Renovate actually resolved
+- Record the conflicting-PR and Renovate-label traps in CLAUDE.md
 
 ## [0.1.1] - 2026-08-04
 
