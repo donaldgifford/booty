@@ -17,6 +17,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Record Codecov and Renovate as enabled ([#9](https://github.com/donaldgifford/booty/issues/9))
 - Record the Renovate label verification ([#16](https://github.com/donaldgifford/booty/issues/16))
 
+### Miscellaneous Tasks
+
+- Delete the changelog drift check ([#17](https://github.com/donaldgifford/booty/issues/17))
+
 ## [0.1.1] - 2026-08-04
 
 ### Bug Fixes
