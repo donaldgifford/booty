@@ -287,6 +287,19 @@ exactly what this phase exists to catch. All are fixed on the branch:
    independent of content. Regenerated the file and added `.prettierignore` so
    Prettier stops re-wrapping it. Prettier is not in CI, so this drift came from
    a local/editor run.
+
+   **Update (2026-08-10): `changelog.yml` has since been deleted.** The fix
+   above made the check pass, but the check itself was unsound. It requires the
+   PR branch to commit a git-cliff run over the branch's own commits, and
+   squash-merge then collapses those commits into one named after the PR title
+   — so the entry the check demanded is wrong the instant it lands. `Changelog
+   Regen` rewrites it on `main`, and that rewrite conflicts with the next branch
+   that obeyed the check, which silently stops all `pull_request` workflows
+   (GitHub queues none on a conflicting PR). Observed on PRs #10 and #16:
+   `- *(impl)* Record the Renovate label verification` on the branch became
+   `- Record the Renovate label verification ([#16](…))` on `main`. `Changelog
+   Regen` alone is authoritative and self-healing, so the drift check was pure
+   friction plus a conflict generator.
 3. **Two reachable CVEs that would have shipped in v0.1.0.** `govulncheck` on
    the runner flagged **GO-2026-5970**, an infinite loop on invalid input in
    `golang.org/x/text`, reachable from `catalog.decodeCatalog` and
@@ -667,6 +680,7 @@ Label flow end-to-end, per DESIGN-0001 OQ-1: seed `v0.0.0`, release PR labeled
       Tagged `v0.0.0` at `71cbc9b`, the merge of [PR #2](https://github.com/donaldgifford/booty/pull/2).
       Confirmed first that no workflow triggers on tag push: `changelog.yml` and
       `release.yml` both mention `tags:`, but neither under `on.push`.
+      (`changelog.yml` was deleted on 2026-08-10 — see Phase 3 finding 2.)
 - [x] Pre-flight at the release commit: `just ci` and `just release-local` both
       clean. It was not quite a formality — see the archive-contents finding
       below. `goreleaser check` validates, and Go 1.26.5 agrees across `go.mod`,

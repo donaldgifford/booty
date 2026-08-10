@@ -92,7 +92,10 @@ Types: `feat`, `fix`, `docs`, `chore`, `refactor`
 ### 3. Commit
 
 Follow [Conventional Commits](https://www.conventionalcommits.org/) — the
-changelog is generated from them via `git-cliff`:
+changelog is generated from them via `git-cliff`. Do not edit or regenerate
+`CHANGELOG.md` yourself: the `Changelog Regen` workflow rewrites it on `main`
+after every merge, and a branch-side copy would describe your individual
+commits rather than the squashed one that actually lands.
 
 ```text
 feat(render): add proxmox-answer render kind

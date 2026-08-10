@@ -151,11 +151,17 @@ the cache layers.
   `pull_request`-triggered workflow is simply never queued: `gh pr
   checks` shows one or two `pull_request_target` jobs and nothing else,
   as though CI were broken. Check `gh pr view N --json mergeable`
-  before debugging the workflows. In this repo the usual cause is
-  `CHANGELOG.md`: `Changelog Regen` auto-pushes a regenerated changelog
-  to `main` after every merge, so any branch that also regenerated one
-  conflicts as soon as something else merges. Rebase, `--skip` your own
-  changelog commits, and regenerate once at the end.
+  before debugging the workflows.
+- **Never commit a regenerated `CHANGELOG.md` on a branch.**
+  `Changelog Regen` owns that file: it runs on push to `main`, runs
+  git-cliff, and commits `chore(changelog): Auto-sync`. A branch-side
+  regeneration is not merely redundant, it is wrong — git-cliff on the
+  branch sees your individual commit subjects, squash-merge collapses
+  them into one commit named after the PR title, and the entry you
+  committed describes something that no longer exists. Auto-sync then
+  rewrites it, and *that* rewrite is what conflicts with the next branch
+  that did the same thing. A `Changelog Drift Check` workflow used to
+  require exactly this and was deleted for it.
 
 ## Renovate
 
