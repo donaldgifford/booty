@@ -61,19 +61,32 @@ above, and ends with commands you can run.
 Pick whichever fits; all three are validated against each release.
 
 ```sh
+VERSION=0.2.0
+
 # Release archive (see "Verifying a release" below before trusting it)
-curl -fsSLO https://github.com/donaldgifford/booty/releases/latest/download/booty_0.1.1_linux_amd64.tar.gz
-tar xzf booty_0.1.1_linux_amd64.tar.gz && install booty ~/.local/bin/
+curl -fsSLO "https://github.com/donaldgifford/booty/releases/download/v${VERSION}/booty_${VERSION}_linux_amd64.tar.gz"
+tar xzf "booty_${VERSION}_linux_amd64.tar.gz" && install booty ~/.local/bin/
 
 # From source, by version
 go install github.com/donaldgifford/booty/cmd/booty@latest
 
 # Container
-docker pull ghcr.io/donaldgifford/booty:0.1.1
+docker pull "ghcr.io/donaldgifford/booty:${VERSION}"
 ```
 
 Archives are published for linux and darwin on amd64 and arm64. Container tags
-are unprefixed — `:0.1.1`, not `:v0.1.1` — while git tags carry the `v`.
+are unprefixed — `:0.2.0`, not `:v0.2.0` — while git tags carry the `v`.
+
+The archive URL names a tag rather than going through `/releases/latest/`.
+Both are pinned to a version either way, because goreleaser stamps the version
+into the filename — so a `/latest/download/booty_0.1.1_…` URL starts returning
+404 the moment 0.1.2 ships, which is worse than being visibly out of date. To
+always get the newest, resolve the tag first:
+
+```sh
+VERSION=$(curl -fsSL https://api.github.com/repos/donaldgifford/booty/releases/latest | jq -r .tag_name)
+VERSION=${VERSION#v}
+```
 
 A `go install` binary knows its version but not its commit or build date: the
 module proxy serves a source zip, not a checkout, so there is no VCS stamp to
