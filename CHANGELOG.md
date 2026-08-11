@@ -3,6 +3,12 @@
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
+## [unreleased]
+
+### Documentation
+
+- Stop the install command 404ing on every release ([#19](https://github.com/donaldgifford/booty/issues/19))
+
 ## [0.2.0] - 2026-08-11
 
 ### Bug Fixes
