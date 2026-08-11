@@ -51,3 +51,21 @@ MD030: false
 # https://github.com/DavidAnson/markdownlint/blob/main/doc/md033.md
 MD033: false
 # allowed_elements: ["a", "img", "div"]
+
+# Table column style
+# https://github.com/DavidAnson/markdownlint/blob/main/doc/md060.md
+# New in markdownlint v0.41 (markdownlint-cli2 0.23.2), and it arrived as 120
+# errors across 11 files. Four of those are the docz-generated index tables in
+# docs/*/README.md, which docz rewrites on every `docz update` — so alignment
+# applied there by hand is undone the next time anyone adds a document. The
+# rule is structurally unsatisfiable for them, not merely unmet.
+#
+# No style setting helps. The default "any" is already the most permissive at
+# 120 errors; "aligned" gives 299, "compact" 342 and "tight" 1326. Satisfying
+# it means reformatting every table, which Prettier can do for the hand-written
+# files but not for the docz-owned ones.
+#
+# Pipe alignment changes nothing about how Starlight or MkDocs renders a table,
+# so this is cosmetic — the same call already made above for MD004, MD007,
+# MD013, MD030 and MD033.
+MD060: false
