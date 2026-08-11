@@ -467,7 +467,12 @@ func listenBroadcastUDP(addr string) (net.PacketConn, error) {
 	}
 	var setErr error
 	if err := rc.Control(func(fd uintptr) {
-		//nolint:gosec // fd is a real socket descriptor, well within int range
+		// fd is a real socket descriptor, well within int range. This carried a
+		// gosec suppression until golangci-lint 2.12.2, which stopped flagging
+		// the conversion; nolintlint then reported the directive as unused.
+		// Do not write the directive out in prose — golangci-lint parses the
+		// token anywhere in a comment and reads the rest of the line as a
+		// linter list.
 		setErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1)
 	}); err != nil {
 		_ = pc.Close()

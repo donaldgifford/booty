@@ -99,13 +99,17 @@ func (s DirSource) Load(ctx context.Context) (*Catalog, error) {
 	return decodeCatalog(files, s.Overrides)
 }
 
+// blockLabelName is the single label every named top-level block carries, as in
+// `profile "worker" { … }`. Only `locals` is unlabelled.
+const blockLabelName = "name"
+
 // The block schema booty understands at the top level of a catalog file.
 var catalogSchema = &hcl.BodySchema{
 	Blocks: []hcl.BlockHeaderSchema{
-		{Type: "variable", LabelNames: []string{"name"}},
+		{Type: "variable", LabelNames: []string{blockLabelName}},
 		{Type: "locals"},
-		{Type: "profile", LabelNames: []string{"name"}},
-		{Type: "group", LabelNames: []string{"name"}},
+		{Type: "profile", LabelNames: []string{blockLabelName}},
+		{Type: "group", LabelNames: []string{blockLabelName}},
 	},
 }
 

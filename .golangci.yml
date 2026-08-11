@@ -134,6 +134,15 @@ linters:
     goconst:
       min-len: 3
       min-occurrences: 3  # Uber: Extract repeated strings
+      # Count occurrences in production code only. golangci-lint 2.12.2 started
+      # counting _test.go files toward the threshold, and every finding it added
+      # was a table-driven test repeating a fixture value: "talos-machineconfig"
+      # is 1 occurrence in production and 7 in tests, "ipxe.efi" 2 and 13,
+      # "x86_64" 2 and 18. Hoisting those into constants would make the tables
+      # assert against the same symbol the code under test uses, so a wrong
+      # rename would pass — the literal is the point. Production repetition is
+      # still flagged.
+      ignore-tests: true
 
     gocritic:
       enabled-tags:
