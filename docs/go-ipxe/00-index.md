@@ -72,6 +72,7 @@ You need to know Go basics — goroutines, interfaces, error handling. The guide
 | 8. Assembly & CLI | `07-forge-complete.md` | ✅ rewritten + code | thin `cmd/booty`: subcommand dispatch, `validate` CI gate, one context driving TFTP + HTTP + opt-in proxyDHCP, ldflags versioning |
 | 9. QEMU / OVMF end-to-end | `09-qemu-e2e.md` | ✅ new + code | two-tier `test/e2e`: an always-on protocol tier + a real UEFI-VM QEMU tier (skips unequipped) |
 | 10. Debugging field guide | `08-debugging-field-guide.md` | ✅ rewritten | validate→curl→logs→tcpdump loop; booty's real status/log diagnostic map & failure catalog |
+| 11. Talos in the field | `10-talos-overlay-walkthrough.md` | ✅ new | overlay templates end to end: `talosctl gen config` → templates → embedded iPXE → a real OVMF VM → bootstrapped cluster, with the field failure catalog |
 | — | `05-cloud-init-spec.md` | legacy → folds into Ch 6 | cloud-init NoCloud model (kept until the render chapter absorbs it) |
 
 ---
