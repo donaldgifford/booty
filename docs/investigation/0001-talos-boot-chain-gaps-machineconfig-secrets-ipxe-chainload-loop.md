@@ -152,6 +152,14 @@ Both push per-site work onto the operator that dnsmasq-based Matchbox setups
 express in two config lines, and the second assumes the operator controls the
 DHCP server at all — the one assumption proxyDHCP exists to avoid.
 
+Concrete instance (2026-08-16): the reference deployment's DHCP is a UniFi
+UCG Fiber, whose UI exposes at most a static boot server/file per network —
+it cannot express "iPXE user-class gets the script URL". For that class of
+gateway the DHCP-side workaround does not exist, leaving only the
+embedded-script binary (netboot.xyz's model). booty answering the user-class
+itself is therefore the zero-config path for the hardware this project
+actually runs on, not merely a convenience.
+
 ### Observation 3: the iPXE binaries are the operator's problem
 
 booty serves whatever is in `--boot-dir` but ships no iPXE binaries, and the

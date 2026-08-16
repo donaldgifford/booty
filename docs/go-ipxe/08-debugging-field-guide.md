@@ -238,8 +238,12 @@ Chapter 2).
 Offer actually carried `next-server` (booty's IP) and `file "ipxe.efi"`. Then
 confirm booty's TFTP is listening — the `TFTP listening` log line, or `ss -lun |
 grep 69`. **Distroless caveat:** the release image runs as nonroot (UID 65532),
-and binding port 69 needs privilege — grant `CAP_NET_BIND_SERVICE` or map the port,
-or the TFTP listener silently never comes up.
+and under `--net=host` (which real PXE requires) binding port 69 fails with
+`bind: permission denied` and the container exits — loud, not silent. Run with
+`--user 0:0` or set `net.ipv4.ip_unprivileged_port_start=0` on the host;
+`--cap-add NET_BIND_SERVICE` does *not* work for a non-root image (no ambient
+capabilities), and remapping the port doesn't help ROM clients, which always
+speak TFTP to port 69.
 
 **TFTP ERROR "file not found".** RRQ arrives, booty replies with an ERROR packet;
 the log shows `TFTP file not found file=ipxe.efi`. `ipxe.efi` isn't in `--boot-dir`

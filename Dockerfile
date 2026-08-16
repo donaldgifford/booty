@@ -32,9 +32,14 @@ FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=builder /booty /booty
 
 # HTTP :8080, TFTP :69, proxyDHCP :67 + BINL :4011. The image runs as
-# nonroot (UID 65532): binding the privileged UDP ports needs
-# CAP_NET_BIND_SERVICE (or remap them with --tftp-addr/--proxydhcp-addr),
-# and the rootfs is read-only — mount the catalog and boot assets as volumes.
+# nonroot (UID 65532). On a bridge network every port binds fine (Docker
+# zeroes ip_unprivileged_port_start inside the container netns), but real
+# PXE needs --net=host, where the host's sysctl applies: binding 69/67/4011
+# then needs --user 0:0, or ip_unprivileged_port_start=0 on the host, or a
+# derived image that setcaps the binary. Plain --cap-add NET_BIND_SERVICE
+# does NOT work — Docker grants no ambient capabilities to non-root users,
+# so the capability never reaches the process (verified against v0.2.0).
+# The rootfs is read-only — mount the catalog and boot assets as volumes.
 EXPOSE 8080/tcp 69/udp 67/udp 4011/udp
 
 USER nonroot:nonroot

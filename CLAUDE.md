@@ -127,9 +127,16 @@ the cache layers.
   pre-v2 `.goreleaser.yml` from elsewhere, validate with
   `goreleaser check`.
 - **Distroless `nonroot` UID is 65532**. If the binary needs to write
-  state, mount a writable volume — the rootfs is read-only. Binding the
-  privileged UDP ports (69, 67, 4011) in a container needs
-  `CAP_NET_BIND_SERVICE` or remapped `--tftp-addr`/`--proxydhcp-addr`.
+  state, mount a writable volume — the rootfs is read-only. Port binding
+  in the container is two different worlds (verified against v0.2.0):
+  bridge networks bind everything fine even as nonroot (Docker zeroes
+  `ip_unprivileged_port_start` in the netns), but real PXE requires
+  `--net=host`, where the host's sysctl applies and 69/67/4011 need
+  `--user 0:0`, a host `ip_unprivileged_port_start=0`, or a setcap'd
+  derived image. `--cap-add NET_BIND_SERVICE` does **not** work for a
+  non-root image — Docker grants no ambient capabilities to non-root
+  users. Remapped `--tftp-addr`/`--proxydhcp-addr` can't help real PXE
+  either: ROM clients fix 69/67/4011 on their side.
 - **`GOTOOLCHAIN=auto` breaks `go-licenses`**. If the `go` on PATH is
   older than `go.mod`'s directive, Go silently switches to a downloaded
   toolchain and `go list` then reports stdlib packages under
