@@ -86,11 +86,13 @@ investigation.
    against `talosctl gen config` output. Decide package shape (new
    `render/talos` vs inside `render`) per ADR-0002's "a real consumer's need
    drives every addition".
-2. **Secrets-at-rest design sketch.** machinery generates secrets, but booty
-   serves plaintext YAML over HTTP to anyone who knows a MAC — same posture as
-   Matchbox, worth stating rather than inheriting silently. Enumerate: secrets
-   bundle on disk vs generated per-boot; whether `/machine-config` needs the
-   same bearer-token option `--proxmox-token` already models.
+2. **Secrets-at-rest design sketch — spun out to
+   [INV-0002](0002-secrets-backends-and-machine-config-verification-for-the-booty.md)
+   (2026-08-16).** The questions this step listed (secret inputs, serving
+   posture, `/machine-config` bearer auth) grew their own decision surface:
+   secret-backend interface, module posture, and a decided tier model. The
+   short version relevant here: `/machine-config` gets a `--proxmox-token`-style
+   static token (tier 1), and the default stays Matchbox-parity plaintext.
 3. **user-class loop-break.** Packet-capture a QEMU boot (the e2e QEMU tier
    already drives OVMF): confirm the re-DHCP DISCOVER carries option 77
    `"iPXE"` and option 175. Prototype the branch in `handleDHCP`/`handleBINL`:
@@ -102,6 +104,13 @@ investigation.
    `embed.FS` data without its server packages? Check licence, update cadence
    vs iPXE upstream, and binary size added to booty's own embed. Compare
    against a `docker run` CI build of pinned iPXE with `EMBED=chain.ipxe`.
+   *Narrowed 2026-08-16 (INV-0002 decisions): booty will not be a build
+   service — owning an iPXE build pipeline is out of scope, so the CI-build
+   comparison is a baseline to measure against, not a candidate outcome.
+   Pinning and verifying an upstream-built binary (ipxedust or checksummed
+   release) is the space of acceptable answers. This also caps the loop-break
+   options in step 3: solutions requiring a custom EMBED build are out, which
+   makes the user-class DHCP answer the primary path rather than one of two.*
 5. Write up per-question conclusions; spin out DESIGN docs for whatever
    survives.
 

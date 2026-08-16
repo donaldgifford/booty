@@ -14,6 +14,7 @@ Design docs, plans, and implementation docs can reference investigations by ID
 | ID | Title | Status | Date | Author | Link |
 |----|-------|--------|------|--------|------|
 | INV-0001 | Talos boot-chain gaps: machineconfig secrets, iPXE chainload loop, iPXE binary provenance | Open | 2026-08-16 | Donald Gifford | [0001-talos-boot-chain-gaps-machineconfig-secrets-ipxe-chainload-loop.md](0001-talos-boot-chain-gaps-machineconfig-secrets-ipxe-chainload-loop.md) |
+| INV-0002 | Secrets backends and machine-config verification for the booty CLI | Open | 2026-08-16 | Donald Gifford | [0002-secrets-backends-and-machine-config-verification-for-the-booty.md](0002-secrets-backends-and-machine-config-verification-for-the-booty.md) |
 <!-- END DOCZ AUTO-GENERATED -->
 <!-- BEGIN DOCZ AUTO-GENERATED -->
 <!-- END DOCZ AUTO-GENERATED -->
