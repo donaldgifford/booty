@@ -9,6 +9,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Stop the install command 404ing on every release ([#19](https://github.com/donaldgifford/booty/issues/19))
 
+### Miscellaneous Tasks
+
+- Mandatory Talos kernel args + INV-0001 on the boot-chain gaps ([#20](https://github.com/donaldgifford/booty/issues/20))
+
 ## [0.2.0] - 2026-08-11
 
 ### Bug Fixes
