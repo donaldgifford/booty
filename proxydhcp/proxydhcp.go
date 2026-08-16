@@ -61,11 +61,15 @@ const (
 // shortcut, and it is what makes the client send a Boot Server Request to :4011.
 const discoveryControl4011 = 0x07
 
-// pxeBootServerType is the opaque boot-server "type" tag. It must be identical
-// across PXE_BOOT_SERVERS (8), PXE_BOOT_MENU (9), and the client's PXE_BOOT_ITEM
-// (71); the value itself is arbitrary for a single-service proxy. If a specific
-// firmware rejects it, this is the one knob to turn.
-const pxeBootServerType uint16 = 0
+// pxeBootServerType is the boot-server "type" tag. It must be identical across
+// PXE_BOOT_SERVERS (8), PXE_BOOT_MENU (9), and the client's PXE_BOOT_ITEM (71).
+// It must NOT be 0: type 0 is the PXE spec's "local boot" sentinel, and EDK2
+// (OVMF and most UEFI firmware) aborts netboot with "PXE-E21: Remote boot
+// cancelled" when the selected menu item has type 0 (PxeBcBoot.c treats
+// BOOT_TYPE_BOOTSTRAP as boot-from-local-media). Any non-zero value works; the
+// semantic type names in the spec table (1 = "Windows NT Boot Server", …) are
+// ignored by clients.
+const pxeBootServerType uint16 = 1
 
 const magicCookie uint32 = 0x63825363
 
