@@ -47,8 +47,23 @@ clean:
     @rm -rf {{ bin_dir }}/
     @rm -f {{ coverage_out }}
     @go clean -cache
-    @find . -name "*.test" -delete
-    @echo "✓ Cleaned build artifacts"
+
+# Build an iPXE EFI binary with an embedded chain script pointing at booty.
+# A stock ipxe.efi re-DHCPs after loading, and booty's proxyDHCP answers with
+# ipxe.efi again, forever (INV-0001); embedding the script breaks the loop.
+# url is booty's chain endpoint, e.g. http://192.168.1.10:8080/boot.ipxe.
+# Drop the output in --boot-dir. Runs the upstream build in a linux/amd64
+# container, so it works from any docker host; ref pins the iPXE revision.
+[group('build')]
+ipxe-embed url ref="master":
+    @mkdir -p build/ipxe
+    @printf '#!ipxe\ndhcp\nchain %s || shell\n' '{{ url }}' > build/ipxe/embed.ipxe
+    docker run --rm --platform linux/amd64 -v {{ justfile_directory() }}/build/ipxe:/out debian:bookworm bash -ec '\
+        apt-get update -qq >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends gcc libc6-dev make git ca-certificates perl liblzma-dev >/dev/null; \
+        git clone -q --depth 1 --branch {{ ref }} https://github.com/ipxe/ipxe /ipxe; \
+        make -s -C /ipxe/src -j"$(nproc)" bin-x86_64-efi/ipxe.efi EMBED=/out/embed.ipxe; \
+        cp /ipxe/src/bin-x86_64-efi/ipxe.efi /out/ipxe.efi'
+    @echo "✓ build/ipxe/ipxe.efi (embedded chain → {{ url }})"
 
 # ─── Run ────────────────────────────────────────────────────────────
 
