@@ -23,6 +23,8 @@ created: 2026-08-16
   - [Observation 1: the embedded Talos templates cannot form a cluster](#observation-1-the-embedded-talos-templates-cannot-form-a-cluster)
   - [Observation 2: proxyDHCP does not break the iPXE chainload loop](#observation-2-proxydhcp-does-not-break-the-ipxe-chainload-loop)
   - [Observation 3: the iPXE binaries are the operator's problem](#observation-3-the-ipxe-binaries-are-the-operators-problem)
+  - [Observation 4: proxy offers egress the default-route interface on multi-homed hosts](#observation-4-proxy-offers-egress-the-default-route-interface-on-multi-homed-hosts)
+  - [Observation 5: boot-item type 0 means "boot local" to UEFI firmware](#observation-5-boot-item-type-0-means-boot-local-to-uefi-firmware)
 - [Conclusion](#conclusion)
 - [Recommendation](#recommendation)
 - [References](#references)
@@ -125,8 +127,17 @@ investigation.
 
 ## Findings
 
-Findings so far are from the validation read of the code and guides; the
-experiments in [Approach](#approach) have not run yet.
+Observations 1–3 are from the validation read of the code and guides; the
+experiments in [Approach](#approach) have not run yet. Observations 4–5 are
+from the first live field test (2026-08-16): a Proxmox OVMF (EDK2) VM
+PXE-booted against booty v0.2.0 on a dual-NIC docker host, through a real
+UniFi-gateway DHCP environment, to a bootstrapped single-node Talos v1.13.8
+cluster (`kubectl get nodes` → `Ready`). The full chain — proxyDHCP offer,
+BINL boot-ack, TFTP of an embedded-script `ipxe.efi`, HTTP boot script and
+assets, overlay-template `/machine-config` — worked end to end *after* the
+two bugs below were found and dealt with; neither is reachable by the e2e
+protocol tier, because both live in the gap between booty's packets being
+well-formed and a real firmware/kernel acting on them.
 
 ### Observation 1: the embedded Talos templates cannot form a cluster
 
@@ -170,6 +181,45 @@ build, which `wget` cannot provide. PLAN-0001's row for `tinkerbell/ipxedust`
 ("Consuming assets without their server wiring; provenance trust") is exactly
 this question and remains unevaluated.
 
+### Observation 4: proxy offers egress the default-route interface on multi-homed hosts
+
+`handleDHCP` sends the phase-1 proxy OFFER to `255.255.255.255:68` on the
+socket bound to `0.0.0.0:67`. On Linux, a limited-broadcast send from an
+unbound socket follows the routing table, and the route for
+`255.255.255.255/32` resolves via the *default route* — so on a host with
+two NICs, every proxy offer leaves through the default-route interface
+regardless of which interface heard the DISCOVER. Field symptom (maximally
+misleading): booty logs a healthy `proxyDHCP offer` burst while the client
+reports `PXE-E16: No valid offer received` — the log records the *send call*,
+not delivery, and the packet is exiting the wrong port. Phase-2 BINL, TFTP,
+and HTTP are unicast replies and route correctly; only the phase-1 broadcast
+is affected, so the failure is invisible to every later stage.
+
+Workaround (host-level, not persistent across reboots unless added to the
+host's network config): `ip route add 255.255.255.255/32 dev <pxe-iface>`.
+
+Proper fix (open): reply out the interface the DISCOVER arrived on via
+`IP_PKTINFO` control messages (`golang.org/x/net/ipv4`), or an explicit
+`--interface` bind. The user-class loop-break prototype (Approach step 3)
+touches the same read/write path and should land on top of whichever shape
+this takes.
+
+### Observation 5: boot-item type 0 means "boot local" to UEFI firmware
+
+`pxeBootServerType` was `0`, used consistently across `PXE_BOOT_SERVERS`,
+`PXE_BOOT_MENU`, and the `PXE_BOOT_ITEM` echo — the comment called the value
+arbitrary. It is not: in the PXE menu convention, boot-server type 0 is the
+"local boot" sentinel (dnsmasq documents `pxe-service` type 0 as "abort net
+boot and continue from local media"), and EDK2 enforces it literally —
+`PxeBcBoot.c` returns `EFI_ABORTED` when the selected menu item has type
+`EFI_PXE_BASE_CODE_BOOT_TYPE_BOOTSTRAP` (0). Field symptom: DHCP completes
+("Station IP address is …"), then `PXE-E21: Remote boot cancelled` — booty's
+own offer instructed the firmware to cancel booty. Fixed alongside this
+observation: the constant is now a non-zero type (`1`); the semantic names in
+the spec's type table are ignored by clients, only the zero/non-zero
+distinction has behaviour attached. BIOS ROM path unaffected (the arch split
+in `bootFile` never keyed off the type).
+
 ## Conclusion
 
 **Answer:** <!-- pending — one conclusion per question after the Approach runs -->
@@ -194,7 +244,10 @@ ipxedust experiments feeding the e2e QEMU tier.
 - Chapter 04, [iPXE deep dive](../go-ipxe/04-ipxe-deep-dive.md) — chainload
   script deployment options
 - `render/templates/talos/_common.yaml.tmpl` — the secrets-omitted note
-- `proxydhcp/proxydhcp.go` — `handleDHCP` / `uefiArch`
+- `proxydhcp/proxydhcp.go` — `handleDHCP` / `uefiArch` /
+  `pxeBootServerType` (Observations 4–5)
+- EDK2 `NetworkPkg/UefiPxeBcDxe/PxeBcBoot.c` — the type-0 abort
+  (Observation 5)
 
 [Matchbox]: https://docs.siderolabs.com/talos/v1.13/platform-specific-installations/bare-metal-platforms/matchbox
 [PXE]: https://docs.siderolabs.com/talos/v1.13/platform-specific-installations/bare-metal-platforms/pxe
