@@ -179,10 +179,27 @@ just docker-build             # local image via docker buildx bake
 `docker-bake.hcl` defines the targets: a local single-arch build, a fast
 linux/amd64 CI build, and a multi-arch (amd64+arm64) release push with SBOM +
 provenance attestations. The image is distroless (`static-debian12:nonroot`)
-with `booty` as the entrypoint. Two runtime notes: the nonroot user (UID 65532)
-can't bind the privileged UDP ports (69, 67, 4011) without
-`CAP_NET_BIND_SERVICE` or remapping them via `--tftp-addr`/`--proxydhcp-addr`,
-and the rootfs is read-only — mount the catalog and boot assets as volumes.
+with `booty` as the entrypoint.
+
+Runtime notes, verified against the v0.2.0 image:
+
+- **Real PXE needs `--net=host`.** DHCP DISCOVERs are broadcast, and TFTP
+  data flows from a fresh ephemeral port per transfer (RFC 1350 TIDs);
+  neither survives bridge-NAT port mapping.
+- **Under host networking the nonroot user (UID 65532) cannot bind UDP
+  69/67/4011, and `--cap-add NET_BIND_SERVICE` does not fix it** — Docker
+  grants no ambient capabilities to non-root users, so the capability never
+  reaches the process; the container exits with `bind: permission denied`.
+  What works: `--user 0:0`, setting `net.ipv4.ip_unprivileged_port_start=0`
+  on the host, or a derived image that `setcap`s the binary.
+- **Remapping `--tftp-addr`/`--proxydhcp-addr` does not help PXE firmware.**
+  ROM clients fix the ports on their side (69 TFTP, 67 broadcast, 4011
+  BINL); remapped ports only work behind an external redirect, or for
+  non-PXE testing.
+- On a plain bridge network every port binds even as nonroot (Docker zeroes
+  `ip_unprivileged_port_start` in the container namespace) — fine for
+  HTTP-only serving and tests, not for booting real machines.
+- The rootfs is read-only — mount the catalog and boot assets as volumes.
 
 ## Layout
 

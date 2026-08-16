@@ -28,5 +28,13 @@ locals {
     "console=ttyS0,115200n8",
     "console=tty0",
     "talos.platform=metal",
+    # Talos requires these hardening args on metal — the PXE guide lists
+    # slab_nomerge and pti=on as mandatory alongside talos.platform, and the
+    # Matchbox guide's profiles carry init_on_alloc=1 too. A node boots without
+    # them, which is exactly why their absence goes unnoticed.
+    # https://docs.siderolabs.com/talos/v1.13/platform-specific-installations/bare-metal-platforms/pxe
+    "init_on_alloc=1",
+    "slab_nomerge",
+    "pti=on",
   ]
 }
