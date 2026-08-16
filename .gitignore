@@ -56,3 +56,16 @@ dist/
 
 # donald-loop runtime state
 .claude/donald-loop.local.md
+
+# talosctl-generated cluster material — real secrets, never commit.
+# `talosctl gen config` drops these in the CWD, and the overlay-template
+# workflow starts from a repo checkout, so guard the names here.
+secrets.yaml
+talosconfig
+controlplane.yaml
+worker.yaml
+kubeconfig
+
+# Local overlay templates derived from the files above (mounted via
+# --templates-dir, never committed — they embed the cluster secrets).
+/templates-local/
