@@ -136,7 +136,12 @@ variable "cluster"       { default = "home" }
 
 locals {
   boot_base      = "talos/${var.talos_version}"
-  common_cmdline = ["console=ttyS0,115200n8", "console=tty0", "talos.platform=metal"]
+  # talos.platform=metal tells Talos how it was installed; init_on_alloc=1,
+  # slab_nomerge and pti=on are kernel hardening args Talos requires on metal.
+  common_cmdline = [
+    "console=ttyS0,115200n8", "console=tty0",
+    "talos.platform=metal", "init_on_alloc=1", "slab_nomerge", "pti=on",
+  ]
 }
 
 profile "talos-worker" {
