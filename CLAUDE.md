@@ -84,7 +84,7 @@ the cache layers.
 
 ## Go-specific conventions
 
-- **`go.mod` go directive matches `mise.toml`** (currently `go 1.26.4`).
+- **`go.mod` go directive matches `mise.toml`** (currently `go 1.26.10`).
   Bump both together — Renovate's Go updater handles `go.mod`; bump
   `mise.toml` in the same commit.
 - **No `vendor/`**. Modules are resolved at build time; the Docker cache
