@@ -19,6 +19,6 @@ jobs:
       # trufflesecurity/trufflehog publishes no floating v3 tag — only exact
       # versions — so a major-only ref fails to resolve. Renovate bumps this.
       - name: Secret Scanning
-        uses: trufflesecurity/trufflehog@v3.96.0
+        uses: trufflesecurity/trufflehog@3bd2b5887eb0efb8fa18bfd1d296032924e4ffdc # v3.99.9
         with:
           extra_args: --results=verified,unknown
